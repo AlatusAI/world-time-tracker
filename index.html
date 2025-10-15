@@ -1,1130 +1,216 @@
-<!-- 
-    CRITICAL IMPROVEMENTS: 
-    1. Feature Addition: Implemented Save/Load Favorite Comparisons using Firestore.
-    2. UI Update: Added a dedicated section for "My Saved Comparisons".
-    3. Firebase Update: Added Firestore 'setDoc' and 'deleteDoc' for saving/removing favorites.
-    4. Globe Interaction: Ensures the selected cities are highlighted immediately.
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Time & Weather Tracker: World Traveler's Tool</title>
+    <title>Custom SVG Global Data Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: linear-gradient(135deg, #1f2937 0%, #111827 100%); /* Dark gradient background */
-            color: #f3f4f6;
+        /* Custom styles for aesthetic appeal */
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
         }
-
-        /* --- 3D Globe Styling --- */
-        #map-container-wrapper {
-             max-width: 1200px;
-             margin: 0 auto;
-             padding: 1rem;
+        .card:hover {
+            transform: translateY(-2px);
         }
-
-        #map-container {
-            width: 100%;
-            height: 600px; 
-            position: relative;
-            border-radius: 1.5rem;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); /* Deep shadow for 3D effect */
-            background-color: #0d131f; /* Globe container background */
-        }
-        
-        /* Pin pop-ups now use fixed positioning relative to the map container */
-        .city-card-popup {
+        .tooltip {
             position: absolute;
-            width: 280px; 
-            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-            opacity: 0;
             pointer-events: none;
-            transform: translateY(10px);
-            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.1s;
+            z-index: 50; /* High z-index to ensure visibility */
         }
-        .city-card-popup.active {
-            opacity: 1;
-            pointer-events: auto;
-            transform: translateY(0);
+        .country-path {
+            fill: #E5E7EB; /* Default fill color */
+            stroke: #ffffff; /* White border for definition */
+            stroke-width: 0.5;
+            transition: fill 0.2s, stroke 0.2s;
+            cursor: pointer;
         }
-
-        /* --- Card Styling Refinement --- */
-        .card { 
-            background-color: #374151; /* Dark card background */
-            border: 1px solid #4b5563;
+        .country-path:hover {
+            stroke: #1F2937; /* Dark gray border on hover */
+            stroke-width: 1px;
+            filter: brightness(1.1);
         }
-        .card-content {
-            position: relative;
-            z-index: 10;
-        }
-
-        /* --- Utility Classes for dark mode and better contrast --- */
-        .input-dark {
-            background-color: #1f2937;
-            border-color: #4f46e5;
-            color: #f3f4f6;
-        }
-        .suggestion-item {
-            color: #1f2937;
-        }
-        .suggestion-item:hover {
-            background-color: #e0e7ff;
-        }
-        
-        /* --- Animation Styling --- */
-        @keyframes sun-ray-glow {
-            0%, 100% { text-shadow: 0 0 5px #facc15, 0 0 10px #f97316; }
-            50% { text-shadow: 0 0 15px #facc15, 0 0 20px #f97316; }
-        }
-        .animated-sun {
-            animation: sun-ray-glow 4s ease-in-out infinite;
-        }
-        
-        /* Custom alert/modal styling */
-        .modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 5000;
-            padding: 1.5rem;
-            border-radius: 0.75rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, -60%); }
-            to { opacity: 1; transform: translate(-50%, -50%); }
-        }
-
     </style>
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen flex items-start justify-center p-4 sm:p-8 font-sans">
 
-<div id="app" class="min-h-screen p-4 sm:p-8">
-    <header class="mb-8 max-w-7xl mx-auto">
-        <h1 class="text-4xl font-extrabold text-center text-indigo-400">Global Time & Weather Tracker</h1>
-        <p class="text-center text-gray-400 mt-2">A vital tool for world travelers and global businesses. Compare local time, weather, and locations instantly.</p>
-        <p id="user-info" class="text-xs text-center text-gray-500 mt-2">Loading user data...</p>
-    </header>
+    <div id="app" class="w-full max-w-7xl">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Global Impact Score Map</h1>
+            <p class="text-lg text-gray-500 mt-2">Visualization of hypothetical country performance data.</p>
+        </header>
 
-    <!-- Two Search Inputs for Comparison (Updated for Autocomplete) -->
-    <div class="max-w-4xl mx-auto mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <!-- Input 1 -->
-        <div class="relative">
-            <input 
-                type="text" 
-                id="city-search-1" 
-                placeholder="Search City 1 (e.g., New Delhi or India)" 
-                class="w-full p-3 border-2 input-dark rounded-lg focus:outline-none focus:ring-4 focus:ring-red-500 shadow-xl"
-            >
-            <div id="suggestions-1" class="absolute z-30 w-full bg-white border border-gray-300 rounded-lg shadow-2xl mt-1 max-h-48 overflow-y-auto hidden">
-                <!-- Suggestions go here -->
-            </div>
-        </div>
-        
-        <!-- Input 2 -->
-        <div class="relative">
-            <input 
-                type="text" 
-                id="city-search-2" 
-                placeholder="Search City 2 (e.g., Porto or Portugal)" 
-                class="w-full p-3 border-2 input-dark rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-500 shadow-xl"
-            >
-            <div id="suggestions-2" class="absolute z-30 w-full bg-white border border-gray-300 rounded-lg shadow-2xl mt-1 max-h-48 overflow-y-auto hidden">
-                <!-- Suggestions go here -->
-            </div>
-        </div>
-    </div>
-    
-    <!-- Action Button: Save Comparison -->
-    <div class="max-w-4xl mx-auto mb-8 text-center">
-        <button 
-            id="save-comparison"
-            class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg shadow-xl transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled
-        >
-            Save Comparison to Favorites
-        </button>
-    </div>
+        <div class="flex flex-col lg:flex-row space-y-8 lg:space-y-0 lg:space-x-8">
 
-    <!-- Map and Comparison Pins Area -->
-    <div id="map-container-wrapper">
-        <div id="map-container">
-            <!-- Three.js Canvas will be mounted here -->
-            <div id="pin-popup-container" class="absolute inset-0 pointer-events-none">
-                <!-- Pins and Pop-up Cards will be inserted here by JavaScript relative to the container -->
-            </div>
-        </div>
-        <p class="text-center text-gray-500 text-sm italic mt-4">Drag the 3D globe to rotate and explore the selected cities.</p>
-    </div>
-    
-    <!-- Saved Comparisons List -->
-    <div class="max-w-7xl mx-auto px-4 mt-12">
-        <h2 class="text-3xl font-bold text-gray-300 mb-4 border-b border-gray-700 pb-2">My Saved Comparisons</h2>
-        <div id="saved-comparisons-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <p class="col-span-full text-center text-gray-500 p-4" id="loading-favorites">Loading saved comparisons...</p>
-            <!-- Saved comparison cards will be rendered here -->
-        </div>
-    </div>
-
-    <!-- Collapsible List for Detailed View -->
-    <div class="max-w-7xl mx-auto px-4 mt-12">
-        <button 
-            id="toggle-list" 
-            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg shadow-xl transition duration-200 flex justify-between items-center"
-        >
-            All Available Cities Data <span id="toggle-icon">▼</span>
-        </button>
-        
-        <div id="city-detail-list" class="max-h-0 overflow-hidden mt-4 transition-all duration-500">
-            <p class="col-span-full text-center text-gray-400 p-4" id="loading-message">Loading city data...</p>
-            <div id="city-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-4 bg-gray-800 rounded-b-xl">
-                <!-- City cards will be rendered here -->
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Container for Custom Alerts -->
-<div id="modal-container"></div>
-
-<!-- Firebase Setup Scripts -->
-<script type="module">
-    // --- Firebase SDK Imports ---
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    
-    setLogLevel('debug'); // Enable Firestore logging
-
-    // --- Global Variables (Provided by environment, with fallback for external deployment) ---
-    // Fallback Configuration: This block allows the app to run on GitHub Pages without the development environment.
-    const MOCK_FIREBASE_CONFIG = {
-        apiKey: "MOCK_API_KEY",
-        authDomain: "MOCK_AUTH_DOMAIN",
-        projectId: "MOCK_PROJECT_ID",
-        storageBucket: "MOCK_STORAGE_BUCKET",
-        messagingSenderId: "MOCK_MESSAGING_SENDER_ID",
-        appId: "MOCK_APP_ID"
-    };
-
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    // Use injected config if available, otherwise use mock config
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : MOCK_FIREBASE_CONFIG;
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-    let app;
-    let db;
-    let auth;
-    let userId = null;
-    let isAuthReady = false;
-    let currentCitiesData = []; 
-    let savedComparisons = []; // New array for saved comparisons
-    let searchCity1 = 'Tokyo'; // Default to a city for initial view
-    let searchCity2 = 'New York'; // Default to a city for initial view
-    let timeUpdateInterval; 
-    
-    // --- THREE.js Global Variables ---
-    let scene, camera, renderer, globe, pinGroup;
-    const GLOBE_RADIUS = 200; // Size of the sphere
-    const mapContainer = document.getElementById('map-container');
-    const pinPopupContainer = document.getElementById('pin-popup-container');
-    let isDragging = false;
-    let previousMousePosition = { x: 0, y: 0 };
-    const rotationSpeed = 0.005;
-
-    // --- Utility Functions ---
-
-    /**
-     * Safely constructs the Firestore public collection path.
-     */
-    function getPublicCollectionPath(collectionName) {
-        return `artifacts/${appId}/public/data/${collectionName}`;
-    }
-
-    /**
-     * Safely constructs the Firestore private collection path for the user.
-     */
-    function getPrivateCollectionPath(collectionName) {
-        if (!userId) return null;
-        return `artifacts/${appId}/users/${userId}/${collectionName}`;
-    }
-
-    /**
-     * Shows a custom modal message instead of using alert().
-     */
-    function showModal(message, type = 'info') {
-        const container = document.getElementById('modal-container');
-        const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-indigo-500';
-        
-        const modal = document.createElement('div');
-        modal.className = `modal ${bgColor} text-white`;
-        modal.innerHTML = `
-            <p class="font-semibold text-lg">${message}</p>
-        `;
-        
-        container.appendChild(modal);
-
-        setTimeout(() => {
-            modal.style.opacity = '0';
-            modal.style.transform = 'translate(-50%, -60%)';
-            setTimeout(() => modal.remove(), 300);
-        }, 3000);
-    }
-
-    /**
-     * Implements exponential backoff for retrying an async operation.
-     */
-    async function retryWithBackoff(fn, maxRetries = 5, delay = 1000) {
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                return await fn();
-            } catch (error) {
-                if (attempt === maxRetries - 1) {
-                    throw error;
-                }
-                console.warn(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2; 
-            }
-        }
-    }
-
-    /**
-     * Calculates and formats the city's current local time based on the UTC offset.
-     */
-    function getCityLocalTime(offsetHours) {
-        const now = new Date();
-        const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-        const cityLocalTimeMs = utcTime + (offsetHours * 3600000); 
-        const cityDate = new Date(cityLocalTimeMs);
-
-        return cityDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    }
-    
-    // --- THREE.js Functions ---
-
-    /**
-     * Converts Latitude and Longitude to 3D Cartesian coordinates on the globe surface.
-     */
-    function latLonToCartesian(lat, lon) {
-        const phi = (90 - lat) * (Math.PI / 180); // Polar angle (from North pole)
-        const theta = (lon + 180) * (Math.PI / 180); // Azimuthal angle (from -180 lon)
-
-        const x = -(GLOBE_RADIUS * Math.sin(phi) * Math.cos(theta));
-        const z = (GLOBE_RADIUS * Math.sin(phi) * Math.sin(theta));
-        const y = (GLOBE_RADIUS * Math.cos(phi));
-
-        return new THREE.Vector3(x, y, z);
-    }
-    
-    /**
-     * Converts a 3D world position to 2D screen coordinates for HTML pop-up placement.
-     */
-    function worldToScreen(vector) {
-        if (!camera || !renderer) return { x: 0, y: 0, visible: false };
-
-        const tempV = vector.clone();
-        tempV.project(camera);
-
-        const rect = mapContainer.getBoundingClientRect();
-        const x = (tempV.x * 0.5 + 0.5) * rect.width;
-        const y = (-tempV.y * 0.5 + 0.5) * rect.height;
-
-        // Check if the pin is visible (i.e., on the front side of the globe)
-        return { 
-            x: x, 
-            y: y, 
-            visible: tempV.z < 1 
-        };
-    }
-    
-    /**
-     * Initializes the Three.js scene, camera, and renderer.
-     */
-    function initThreeJS() {
-        // 1. Scene setup
-        scene = new THREE.Scene();
-        
-        // 2. Camera setup (Perspective camera)
-        camera = new THREE.PerspectiveCamera(75, mapContainer.clientWidth / mapContainer.clientHeight, 0.1, 1000);
-        camera.position.z = GLOBE_RADIUS * 2.5; // Zoomed out a bit
-        
-        // 3. Renderer setup
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(mapContainer.clientWidth, mapContainer.clientHeight);
-        renderer.setClearColor(0x000000, 0); // Transparent background for the canvas
-        mapContainer.appendChild(renderer.domElement);
-        
-        // 4. Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 5); // soft white light
-        scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
-        directionalLight.position.set(100, 100, 100);
-        scene.add(directionalLight);
-        
-        // 5. Globe (The Sphere)
-        const globeGeometry = new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64);
-        const globeMaterial = new THREE.MeshPhongMaterial({
-            color: 0x223355, 
-            specular: 0x111111,
-            shininess: 30,
-            transparent: true,
-            opacity: 0.9,
-            wireframe: false 
-        });
-        globe = new THREE.Mesh(globeGeometry, globeMaterial);
-        scene.add(globe);
-        
-        // 6. Pin Group (container for all city pins)
-        pinGroup = new THREE.Group();
-        globe.add(pinGroup);
-        
-        // Initial rotation for better view
-        globe.rotation.y = THREE.MathUtils.degToRad(60); 
-
-        // Handle resizing
-        window.addEventListener('resize', onWindowResize, false);
-        
-        // Start animation loop
-        animateGlobe();
-        
-        // Setup interaction
-        setupGlobeInteraction();
-    }
-    
-    /**
-     * Handles window resizing to update the camera and renderer size.
-     */
-    function onWindowResize() {
-        if (!camera || !renderer) return;
-
-        camera.aspect = mapContainer.clientWidth / mapContainer.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(mapContainer.clientWidth, mapContainer.clientHeight);
-        
-        updatePinAndCardPositions();
-    }
-
-    /**
-     * The main rendering loop for three.js.
-     */
-    function animateGlobe() {
-        requestAnimationFrame(animateGlobe);
-        
-        if (renderer) {
-            // Constant subtle rotation when not dragging
-            if (!isDragging) {
-                globe.rotation.y += 0.0005;
-            }
-            
-            updatePinAndCardPositions();
-            
-            renderer.render(scene, camera);
-        }
-    }
-    
-    /**
-     * Adds mouse/touch drag functionality to rotate the globe.
-     */
-    function setupGlobeInteraction() {
-        const canvas = renderer.domElement;
-        
-        const onMouseDown = (e) => {
-            isDragging = true;
-            previousMousePosition = { x: e.clientX, y: e.clientY };
-            canvas.style.cursor = 'grabbing';
-        };
-
-        const onMouseUp = () => {
-            isDragging = false;
-            canvas.style.cursor = 'grab';
-        };
-
-        const onMouseMove = (e) => {
-            if (!isDragging) return;
-
-            const deltaX = e.clientX - previousMousePosition.x;
-            const deltaY = e.clientY - previousMousePosition.y;
-
-            // Horizontal rotation (Y-axis)
-            globe.rotation.y += deltaX * rotationSpeed;
-            
-            // Vertical rotation (X-axis, clamped to prevent gimbal lock/flipping)
-            const newRotationX = globe.rotation.x + deltaY * rotationSpeed;
-            globe.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, newRotationX));
-
-            previousMousePosition = { x: e.clientX, y: e.clientY };
-        };
-
-        // Add listeners
-        canvas.addEventListener('mousedown', onMouseDown, false);
-        window.addEventListener('mouseup', onMouseUp, false); 
-        window.addEventListener('mousemove', onMouseMove, false);
-        
-        // Touch events for mobile interaction
-        const onTouchStart = (e) => {
-            if (e.touches.length === 1) {
-                onMouseDown(e.touches[0]);
-            }
-        };
-
-        const onTouchMove = (e) => {
-            if (e.touches.length === 1) {
-                onMouseMove(e.touches[0]);
-                e.preventDefault(); 
-            }
-        };
-
-        const onTouchEnd = () => {
-            onMouseUp();
-        };
-
-        canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-        window.addEventListener('touchend', onTouchEnd, false);
-        window.addEventListener('touchmove', onTouchMove, { passive: false });
-
-
-        canvas.style.cursor = 'grab';
-    }
-
-    /**
-     * Renders the 3D pins on the globe for the two selected cities.
-     */
-    function render3DPins() {
-        while (pinGroup.children.length > 0) {
-            pinGroup.remove(pinGroup.children[0]);
-        }
-        
-        const city1 = findCity(searchCity1);
-        const city2 = findCity(searchCity2);
-        
-        const citiesToPin = [];
-        if (city1 && city1.lat && city1.lon) citiesToPin.push(city1);
-        // Only push city2 if it's different from city1
-        if (city2 && city2.lat && city2.lon && city1?.id !== city2?.id) citiesToPin.push(city2); 
-
-        // Pin Geometry (Simple cone pin)
-        const pinGeometry = new THREE.ConeGeometry(8, 20, 32);
-        const pinMaterial1 = new THREE.MeshBasicMaterial({ color: 0xff4136 }); // Red for city 1
-        const pinMaterial2 = new THREE.MeshBasicMaterial({ color: 0x4f46e5 }); // Indigo for city 2
-
-        citiesToPin.forEach((city, index) => {
-            const position = latLonToCartesian(city.lat, city.lon);
-            
-            const pinMesh = new THREE.Mesh(
-                pinGeometry, 
-                index === 0 ? pinMaterial1 : pinMaterial2
-            );
-            
-            pinMesh.position.copy(position);
-            
-            // Orient the pin to point outward from the globe center
-            pinMesh.lookAt(new THREE.Vector3(0, 0, 0));
-            pinMesh.rotateX(Math.PI / 2); // Rotate to stand upright on the surface
-
-            // Store city data on the mesh for pop-up tracking
-            pinMesh.userData.cityId = city.id;
-            pinMesh.userData.position = position;
-            
-            pinGroup.add(pinMesh);
-        });
-    }
-
-    /**
-     * Generates the HTML for a single city card. This card is now used as a dynamic pop-up.
-     */
-    function generateCityCardHTML(city, isSavedComparison = false) {
-        if (!city) {
-            return `
-                <div class="p-4 rounded-xl bg-gray-700 shadow-inner text-center text-gray-400 min-h-[16rem] flex items-center justify-center">
-                    <p class="text-lg font-medium">City not found or selected.</p>
-                </div>
-            `;
-        }
-        
-        const temperature = city.weather?.temp ?? 'N/A';
-        const condition = city.weather?.condition ?? 'Unknown';
-        const lastUpdated = city.lastUpdated ? new Date(city.lastUpdated).toLocaleTimeString() : 'N/A';
-
-        const localTime = getCityLocalTime(city.timezoneOffset);
-
-        let icon = '';
-        let iconClass = '';
-        if (!city.weather) { icon = '❓'; } 
-        else if (condition.includes('Sunny') || condition.includes('Clear')) { 
-            icon = '☀️'; 
-            iconClass = 'animated-sun';
-        } 
-        else if (condition.includes('Cloudy') || condition.includes('Haze') || condition.includes('Overcast')) { 
-            icon = '☁️'; 
-            iconClass = 'text-gray-400';
-        } 
-        else if (condition.includes('Rain') || condition.includes('Showers')) { 
-            icon = '🌧️'; 
-            iconClass = 'text-blue-400'; 
-        } else if (condition.includes('Snow') || condition.includes('Chilly')) {
-            icon = '❄️';
-        }
-
-        return `
-            <div id="${isSavedComparison ? 'saved-content-' + city.id : 'popup-content-' + city.id}" 
-                class="card p-4 rounded-xl shadow-2xl backdrop-blur-sm bg-gray-700/80 transition duration-300"
-                data-city-id="${city.id}"
-                data-city-offset="${city.timezoneOffset}"
-            >
-                <div class="card-content">
-                    <div>
-                        <div class="text-4xl mb-2 text-white ${iconClass}">${icon}</div>
-                        <h2 class="text-2xl font-extrabold text-white truncate">${city.name}</h2>
-                        <p class="text-sm text-gray-300">${city.country}</p>
-                    </div>
-                    <div class="mt-4 pt-2 border-t border-gray-600">
-                        <div class="flex justify-between items-center text-white mb-2 pb-1 border-b border-gray-600">
-                            <span class="font-medium text-lg">Local Time:</span>
-                            <span class="text-2xl font-bold text-indigo-400" id="${isSavedComparison ? 'saved-time-' + city.id : 'time-' + city.id}">${localTime}</span>
-                        </div>
-
-                        <div class="flex justify-between items-center text-white">
-                            <span class="font-medium">Temperature:</span>
-                            <span class="text-lg font-bold">${temperature}°C</span>
-                        </div>
-                        <div class="flex justify-between items-center text-white mt-1">
-                            <span class="font-medium">Condition:</span>
-                            <span class="text-sm">${condition}</span>
-                        </div>
-                        <div class="flex justify-between items-center text-gray-400 mt-3 text-xs border-t border-gray-700 pt-2">
-                            <span>Last Updated:</span>
-                            <span class="font-semibold">${lastUpdated}</span>
-                        </div>
-                    </div>
+            <!-- Map Container -->
+            <div class="lg:w-3/4 w-full card bg-white p-6 rounded-xl overflow-hidden">
+                <div id="map-container" class="w-full h-96 sm:h-[600px] flex items-center justify-center">
+                    <!-- viewBox adjusted to accommodate a simple, general world map outline -->
+                    <svg id="world-map-svg" viewBox="0 0 1000 600" class="w-full h-full max-h-full">
+                        <!-- Map paths will be inserted here by JavaScript -->
+                    </svg>
                 </div>
             </div>
-        `;
-    }
 
-    /**
-     * Renders the two comparison cities as HTML pop-up cards.
-     */
-    function renderHtmlPopups() {
-        const city1 = findCity(searchCity1);
-        const city2 = findCity(searchCity2);
-        
-        let htmlContent = '';
-        
-        if (city1 && city1.lat && city1.lon) {
-            htmlContent += `<div id="popup-${city1.id}" class="city-card-popup">${generateCityCardHTML(city1)}</div>`;
-        }
-        if (city2 && city2.lat && city2.lon && city1?.id !== city2?.id) {
-            htmlContent += `<div id="popup-${city2.id}" class="city-card-popup">${generateCityCardHTML(city2)}</div>`;
-        }
-
-        pinPopupContainer.innerHTML = htmlContent;
-    }
-    
-    /**
-     * Updates the position of the HTML pop-up cards based on their 3D pin locations.
-     */
-    function updatePinAndCardPositions() {
-        if (!pinGroup) return;
-
-        pinGroup.children.forEach(pin => {
-            const cityId = pin.userData.cityId;
-            const popupElement = document.getElementById(`popup-${cityId}`);
-
-            if (popupElement) {
-                const worldPosition = pin.userData.position.clone();
-                const { x, y, visible } = worldToScreen(worldPosition);
-
-                if (visible) {
-                    popupElement.classList.add('active');
-                    popupElement.style.left = `${x}px`;
-                    popupElement.style.top = `${y}px`;
-                    popupElement.style.transform = `translate(-50%, -100%)`; 
-                } else {
-                    popupElement.classList.remove('active');
-                }
-            }
-        });
-    }
-
-    /**
-     * Renders the full list of cities in the collapsible detail area.
-     */
-    function renderAllCities() {
-        const cityList = document.getElementById('city-list');
-        const loadingMessage = document.getElementById('loading-message');
-        
-        if (loadingMessage) {
-            loadingMessage.style.display = 'none';
-        }
-
-        if (currentCitiesData.length === 0) {
-            cityList.innerHTML = `<p class="col-span-full text-center text-gray-500">No city data available.</p>`;
-            return;
-        }
-
-        const cityElements = currentCitiesData.map(city => 
-            `<div class="rounded-xl shadow-lg border border-gray-700">
-                ${generateCityCardHTML(city)}
-            </div>`
-        ).join('');
-        cityList.innerHTML = cityElements;
-    }
-
-    /**
-     * Renders the user's saved comparisons.
-     */
-    function renderSavedComparisons() {
-        const listContainer = document.getElementById('saved-comparisons-list');
-        const loadingMessage = document.getElementById('loading-favorites');
-        
-        if (loadingMessage) {
-            loadingMessage.style.display = 'none';
-        }
-        
-        if (savedComparisons.length === 0) {
-            listContainer.innerHTML = `
-                <p class="col-span-full text-center text-gray-500 p-4">
-                    No comparisons saved yet. Select two cities above and click "Save Comparison to Favorites".
-                </p>
-            `;
-            return;
-        }
-
-        const comparisonHTML = savedComparisons.map(comparison => {
-            const city1 = findCity(comparison.city1Name);
-            const city2 = findCity(comparison.city2Name);
-
-            if (!city1 || !city2) return ''; // Skip if city data is missing
-
-            return `
-                <div class="p-4 bg-gray-800 rounded-xl shadow-xl border border-gray-700 flex flex-col justify-between">
-                    <div>
-                        <h3 class="text-xl font-bold text-indigo-400 mb-2">
-                            ${city1.name} <span class="text-gray-500 font-normal">vs.</span> ${city2.name}
-                        </h3>
-                        <div class="text-sm text-gray-400 mb-4">
-                            Saved on: ${new Date(comparison.timestamp).toLocaleDateString()}
-                        </div>
-                        <div class="flex justify-around space-x-2">
-                            <div class="w-1/2">${generateCityCardHTML(city1, true)}</div>
-                            <div class="w-1/2">${generateCityCardHTML(city2, true)}</div>
-                        </div>
-                    </div>
-                    <div class="flex justify-between mt-4 space-x-2">
-                        <button 
-                            data-city1="${city1.name}" 
-                            data-city2="${city2.name}" 
-                            class="load-comparison w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition duration-200"
-                        >
-                            Load to Globe
-                        </button>
-                        <button 
-                            data-doc-id="${comparison.id}" 
-                            class="delete-comparison w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition duration-200"
-                        >
-                            Delete
-                        </button>
-                    </div>
+            <!-- Sidebar/Legend/Details -->
+            <div class="lg:w-1/4 w-full space-y-6">
+                
+                <div class="card bg-white p-6 rounded-xl">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Color Legend</h2>
+                    <ul class="space-y-2 text-sm">
+                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#10B981]"></span> Very High (76-100)</li>
+                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#34D399]"></span> High (61-75)</li>
+                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#FBBF24]"></span> Medium (41-60)</li>
+                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#F87171]"></span> Low (0-40)</li>
+                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-gray-200"></span> No Data</li>
+                    </ul>
                 </div>
-            `;
-        }).join('');
-
-        listContainer.innerHTML = comparisonHTML;
-
-        // Add event listeners for Load and Delete buttons
-        document.querySelectorAll('.load-comparison').forEach(button => {
-            button.addEventListener('click', (e) => {
-                searchCity1 = e.target.getAttribute('data-city1');
-                searchCity2 = e.target.getAttribute('data-city2');
-                updateDashboard();
-                showModal('Comparison loaded!', 'success');
-            });
-        });
-
-        document.querySelectorAll('.delete-comparison').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const docId = e.target.getAttribute('data-doc-id');
-                await deleteComparison(docId);
-            });
-        });
-    }
-
-    // --- Data Management and Auth Setup (Kept from previous version) ---
-
-    // Only proceed if the config is available (even if mocked)
-    if (firebaseConfig) {
-        if (firebaseConfig === MOCK_FIREBASE_CONFIG && typeof __firebase_config === 'undefined') {
-            document.getElementById('user-info').textContent = 'User ID: MOCK (Using Mock Data for external deployment)';
-        } else {
-             document.getElementById('user-info').textContent = 'Loading user data...';
-        }
-
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-        
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // If real auth, show UID, otherwise it's just mock/anonymous
-                if(firebaseConfig !== MOCK_FIREBASE_CONFIG) {
-                    document.getElementById('user-info').textContent = `User ID: ${user.uid} (Authenticated)`;
-                }
-            } else if (userId) {
-                document.getElementById('user-info').textContent = `Auth Fallback ID: ${userId}`;
-            }
-        });
-        
-        (async () => {
-            try {
-                if (initialAuthToken && firebaseConfig !== MOCK_FIREBASE_CONFIG) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
                 
-                const user = auth.currentUser;
-                userId = user?.uid || crypto.randomUUID(); 
-                isAuthReady = true;
-
-                initThreeJS();
-                
-                retryWithBackoff(startDataListeners)
-                    .catch(error => {
-                        console.error("Critical error starting data listener after retries:", error);
-                        document.getElementById('loading-message').textContent = `CRITICAL ERROR: Failed to load city data.`;
-                        startMockDataLoad(); // Fallback to in-memory mock if Firestore fails entirely
-                    });
-
-            } catch (error) {
-                console.error("Firebase Auth Error:", error);
-                userId = crypto.randomUUID(); 
-                isAuthReady = true;
-                initThreeJS();
-                startMockDataLoad(); // Fallback to in-memory mock if auth fails
-            }
-        })();
-
-
-    } else {
-        document.getElementById('user-info').textContent = 'Error: Firebase configuration missing.';
-    }
-
-    function findCity(term) {
-        if (!term) return undefined;
-        const normalizedTerm = term.toLowerCase().trim();
-        // Try finding by exact name match first
-        let city = currentCitiesData.find(c => c.name.toLowerCase() === normalizedTerm);
-        if (city) return city;
-
-        // Then try finding by partial match on name or country
-        return currentCitiesData.find(c => 
-             c.name.toLowerCase().startsWith(normalizedTerm) ||
-             c.country.toLowerCase().startsWith(normalizedTerm)
-        );
-    }
-
-    function updateDashboard() {
-        const city1 = findCity(searchCity1);
-        const city2 = findCity(searchCity2);
-
-        // Update search inputs with confirmed city name
-        document.getElementById('city-search-1').value = city1 ? city1.name : searchCity1;
-        document.getElementById('city-search-2').value = city2 ? city2.name : searchCity2;
-        
-        // Enable/Disable save button
-        const saveButton = document.getElementById('save-comparison');
-        if (city1 && city2 && city1.id !== city2.id) {
-            saveButton.disabled = false;
-        } else {
-            saveButton.disabled = true;
-        }
-
-        render3DPins(); 
-        renderHtmlPopups();
-        renderAllCities(); 
-        renderSavedComparisons(); // Rerender favorites list
-        startClock(); 
-    }
+                <div id="detail-card" class="card bg-white p-6 rounded-xl min-h-40">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Country Details</h2>
+                    <p id="country-name" class="text-2xl font-bold text-gray-900">Hover over a country</p>
+                    <p id="country-score" class="text-md text-gray-500 mt-1">Score: N/A</p>
+                    <p id="country-category" class="text-md font-medium mt-2">Category: N/A</p>
+                </div>
+            </div>
+        </div>
+    </div>
     
-    function startClock() {
-        if (timeUpdateInterval) {
-            clearInterval(timeUpdateInterval);
-        }
+    <!-- Tooltip Element -->
+    <div id="tooltip" class="tooltip bg-gray-800 text-white text-xs px-2 py-1 rounded-lg shadow-xl"></div>
 
-        const updateClocks = () => {
-            // Update pop-up clocks
-            document.querySelectorAll('[id^="time-"]').forEach(timeElement => {
-                const cityId = timeElement.id.split('-')[1];
-                const cityCard = document.querySelector(`[data-city-id="${cityId}"]`);
-
-                if (cityCard) {
-                    const offset = parseFloat(cityCard.getAttribute('data-city-offset'));
-                    if (!isNaN(offset)) {
-                        timeElement.textContent = getCityLocalTime(offset);
-                    }
-                }
-            });
-            // Update saved comparison clocks
-            document.querySelectorAll('[id^="saved-time-"]').forEach(timeElement => {
-                const cityId = timeElement.id.split('-')[1];
-                const cityCard = document.querySelector(`[id^="saved-content-"][data-city-id="${cityId}"]`);
-
-                if (cityCard) {
-                    const offset = parseFloat(cityCard.getAttribute('data-city-offset'));
-                    if (!isNaN(offset)) {
-                        timeElement.textContent = getCityLocalTime(offset);
-                    }
-                }
-            });
-        };
-        
-        updateClocks();
-        timeUpdateInterval = setInterval(updateClocks, 60000); // Update every minute
-    }
-    
-    function setupAutocomplete(inputId, suggestionsId) {
-        const input = document.getElementById(inputId);
-        const suggestionsContainer = document.getElementById(suggestionsId);
-        
-        document.addEventListener('click', (e) => {
-            if (e.target !== input && !suggestionsContainer.contains(e.target)) {
-                suggestionsContainer.classList.add('hidden');
-            }
-        });
-
-        input.addEventListener('input', () => {
-            const query = input.value.trim().toLowerCase();
-            suggestionsContainer.innerHTML = '';
-            
-            if (query.length < 2) {
-                suggestionsContainer.classList.add('hidden');
-                
-                if (query.length === 0) {
-                    if (inputId === 'city-search-1') { searchCity1 = ''; } 
-                    else { searchCity2 = ''; }
-                    updateDashboard();
-                }
-                return;
-            }
-
-            const filteredCities = currentCitiesData.filter(city => 
-                city.name.toLowerCase().includes(query) || 
-                city.country.toLowerCase().includes(query)
-            ).slice(0, 10); 
-
-            if (filteredCities.length > 0) {
-                filteredCities.forEach(city => {
-                    const suggestionItem = document.createElement('div');
-                    suggestionItem.className = 'p-3 cursor-pointer suggestion-item hover:bg-indigo-100 transition duration-150 border-b border-gray-100';
-                    suggestionItem.innerHTML = `<span class="font-bold">${city.name}</span>, ${city.country}`;
-                    
-                    suggestionItem.addEventListener('click', () => {
-                        input.value = city.name; 
-                        suggestionsContainer.classList.add('hidden');
-                        
-                        if (inputId === 'city-search-1') { searchCity1 = city.name; } 
-                        else { searchCity2 = city.name; }
-                        updateDashboard();
-                    });
-                    suggestionsContainer.appendChild(suggestionItem);
-                });
-                suggestionsContainer.classList.remove('hidden');
-            } else {
-                suggestionsContainer.classList.add('hidden');
-            }
-        });
-        
-        input.addEventListener('change', (e) => {
-             const selectedCityName = e.target.value.trim();
-             if (inputId === 'city-search-1') { searchCity1 = selectedCityName; } 
-             else { searchCity2 = selectedCityName; }
-             suggestionsContainer.classList.add('hidden');
-             updateDashboard();
-        });
-    }
-
-    setupAutocomplete('city-search-1', 'suggestions-1');
-    setupAutocomplete('city-search-2', 'suggestions-2');
-
-    document.getElementById('toggle-list').addEventListener('click', () => {
-        const listContainer = document.getElementById('city-detail-list');
-        const icon = document.getElementById('toggle-icon');
-        
-        if (listContainer.style.maxHeight === '0px' || listContainer.style.maxHeight === '') {
-            // Set max height high enough to contain all content, plus some buffer
-            listContainer.style.maxHeight = (listContainer.scrollHeight + 50) + "px"; 
-            icon.textContent = '▲';
-        } else {
-            listContainer.style.maxHeight = '0px';
-            icon.textContent = '▼';
-        }
-    });
-
-    document.getElementById('save-comparison').addEventListener('click', saveComparison);
-
-    // --- Mock Data Initialization ---
-    function getMockData() {
-        const now = Date.now();
-        return [
-            { id: 'tokyo', name: 'Tokyo', country: 'Japan', timezoneOffset: 9, lat: 35.6895, lon: 139.6917, weather: { temp: 28, sun: 9, condition: 'Sunny' }, lastUpdated: now },
-            { id: 'beijing', name: 'Beijing', country: 'China', timezoneOffset: 8, lat: 39.9042, lon: 116.4074, weather: { temp: 25, sun: 7, condition: 'Partly Cloudy' }, lastUpdated: now },
-            { id: 'mumbai', name: 'Mumbai', country: 'India', timezoneOffset: 5.5, lat: 19.0760, lon: 72.8777, weather: { temp: 30, sun: 10, condition: 'Humid' }, lastUpdated: now },
-            { id: 'newdelhi', name: 'New Delhi', country: 'India', timezoneOffset: 5.5, lat: 28.6139, lon: 77.2090, weather: { temp: 29, sun: 9, condition: 'Haze' }, lastUpdated: now }, 
-            { id: 'manila', name: 'Manila', country: 'Philippines', timezoneOffset: 8, lat: 14.5995, lon: 120.9842, weather: { temp: 32, sun: 5, condition: 'Rainy' }, lastUpdated: now },
-            { id: 'sydney', name: 'Sydney', country: 'Australia', timezoneOffset: 10, lat: -33.8688, lon: 151.2093, weather: { temp: 22, sun: 10, condition: 'Sunny and Warm' }, lastUpdated: now },
-            { id: 'istanbul', name: 'Istanbul', country: 'Turkey', timezoneOffset: 3, lat: 41.0082, lon: 28.9784, weather: { temp: 20, sun: 8, condition: 'Clear Sky' }, lastUpdated: now },
-            { id: 'jerusalem', name: 'Jerusalem', country: 'Israel', timezoneOffset: 3, lat: 31.7683, lon: 35.2137, weather: { temp: 22, sun: 11, condition: 'Sunny' }, lastUpdated: now }, 
-            { id: 'baghdad', name: 'Baghdad', country: 'Iraq', timezoneOffset: 3, lat: 33.3152, lon: 44.3661, weather: { temp: 35, sun: 10, condition: 'Hot and Sunny' }, lastUpdated: now }, 
-            { id: 'riyadh', name: 'Riyadh', country: 'Saudi Arabia', timezoneOffset: 3, lat: 24.7136, lon: 46.6753, weather: { temp: 40, sun: 12, condition: 'Extreme Heat' }, lastUpdated: now }, 
-            { id: 'london', name: 'London', country: 'UK', timezoneOffset: 1, lat: 51.5074, lon: 0.1278, weather: { temp: 15, sun: 2, condition: 'Cloudy with Rain' }, lastUpdated: now - 3600000 },
-            { id: 'paris', name: 'Paris', country: 'France', timezoneOffset: 2, lat: 48.8566, lon: 2.3522, weather: { temp: 20, sun: 8, condition: 'Partly Cloudy' }, lastUpdated: now }, 
-            { id: 'moscow', name: 'Moscow', country: 'Russia', timezoneOffset: 3, lat: 55.7558, lon: 37.6173, weather: { temp: 10, sun: 4, condition: 'Chilly' }, lastUpdated: now },
-            { id: 'berlin', name: 'Berlin', country: 'Germany', timezoneOffset: 2, lat: 52.5200, lon: 13.4050, weather: { temp: 18, sun: 6, condition: 'Overcast' }, lastUpdated: now },
-            { id: 'rome', name: 'Rome', country: 'Italy', timezoneOffset: 2, lat: 41.9028, lon: 12.4964, weather: { temp: 24, sun: 11, condition: 'Clear Sky' }, lastUpdated: now },
-            { id: 'lisbon', name: 'Lisbon', country: 'Portugal', timezoneOffset: 1, lat: 38.7223, lon: -9.1393, weather: { temp: 21, sun: 10, condition: 'Clear Sky' }, lastUpdated: now },
-            { id: 'porto', name: 'Porto', country: 'Portugal', timezoneOffset: 1, lat: 41.1579, lon: -8.6291, weather: { temp: 18, sun: 9, condition: 'Clear Sky' }, lastUpdated: now }, 
-            { id: 'washington', name: 'Washington', country: 'USA', timezoneOffset: -4, lat: 38.9072, lon: -77.0369, weather: { temp: 17, sun: 8, condition: 'Partly Sunny' }, lastUpdated: now }, 
-            { id: 'newyork', name: 'New York', country: 'USA', timezoneOffset: -4, lat: 40.7128, lon: -74.0060, weather: { temp: 18, sun: 7, condition: 'Mild' }, lastUpdated: now },
-            { id: 'toronto', name: 'Toronto', country: 'Canada', timezoneOffset: -4, lat: 43.6532, lon: -79.3832, weather: { temp: 12, sun: 5, condition: 'Chilly and Wet' }, lastUpdated: now }, 
-            { id: 'mexicocity', name: 'Mexico City', country: 'Mexico', timezoneOffset: -5, lat: 19.4326, lon: -99.1332, weather: { temp: 23, sun: 6, condition: 'Showers' }, lastUpdated: now },
-            { id: 'saopaulo', name: 'Sao Paulo', country: 'Brazil', timezoneOffset: -3, lat: -23.5505, lon: -46.6333, weather: { temp: 26, sun: 9, condition: 'Cloudy' }, lastUpdated: now },
-            { id: 'buenosaires', name: 'Buenos Aires', country: 'Argentina', timezoneOffset: -3, lat: -34.6037, lon: -58.3816, weather: { temp: 19, sun: 8, condition: 'Sunny' }, lastUpdated: now },
-            { id: 'lima', name: 'Lima', country: 'Peru', timezoneOffset: -5, lat: -12.0464, lon: -77.0428, weather: { temp: 20, sun: 5, condition: 'Overcast' }, lastUpdated: now },
-            { id: 'cairo', name: 'Cairo', country: 'Egypt', timezoneOffset: 3, lat: 30.0333, lon: 31.2333, weather: { temp: 28, sun: 11, condition: 'Hot and Dry' }, lastUpdated: now },
-            { id: 'lagos', name: 'Lagos', country: 'Nigeria', timezoneOffset: 1, lat: 6.5244, lon: 3.3792, weather: { temp: 31, sun: 7, condition: 'Humid' }, lastUpdated: now },
-            { id: 'capetown', name: 'Cape Town', country: 'South Africa', timezoneOffset: 2, lat: -33.9249, lon: 18.4241, weather: { temp: 16, sun: 9, condition: 'Clear' }, lastUpdated: now },
+    <script>
+        // --- DATA SETUP ---
+        // Mock data structure: ISO3 codes are used to match the map data
+        const mockCountryData = [
+            { iso3: "CAN", name: "Canada", score: 85, category: "Very High", color: "#10B981" },
+            { iso3: "USA", name: "United States", score: 62, category: "High", color: "#34D399" },
+            { iso3: "MEX", name: "Mexico", score: 45, category: "Medium", color: "#FBBF24" },
+            { iso3: "BRA", name: "Brazil", score: 30, category: "Low", color: "#F87171" },
+            { iso3: "GBR", name: "United Kingdom", score: 78, category: "Very High", color: "#10B981" },
+            { iso3: "DEU", name: "Germany", score: 72, category: "High", color: "#34D399" },
+            { iso3: "FRA", name: "France", score: 68, category: "High", color: "#34D399" },
+            { iso3: "JPN", name: "Japan", score: 90, category: "Very High", color: "#10B981" },
+            { iso3: "CHN", name: "China", score: 55, category: "Medium", color: "#FBBF24" },
+            { iso3: "IND", name: "India", score: 25, category: "Low", color: "#F87171" },
+            { iso3: "AUS", name: "Australia", score: 88, category: "Very High", color: "#10B981" },
+            { iso3: "RUS", name: "Russia", score: 50, category: "Medium", color: "#FBBF24" },
+            { iso3: "ITA", name: "Italy", score: 70, category: "High", color: "#34D399" },
+            { iso3: "ESP", name: "Spain", score: 75, category: "High", color: "#34D399" },
+            { iso3: "PRT", name: "Portugal", score: 81, category: "Very High", color: "#10B981" },
+            { iso3: "NGA", name: "Nigeria", score: 35, category: "Low", color: "#F87171" },
+            { iso3: "ZAF", name: "South Africa", score: 58, category: "Medium", color: "#FBBF24" },
         ];
-    }
-    
-    function startMockDataLoad() {
-        currentCitiesData = getMockData();
-        updateDashboard();
-        document.getElementById('loading-message').textContent = `Using internal mock data.`;
-    }
 
-    // --- Data Listeners (Firestore) ---
-    async function startDataListeners() {
-        if (!db || !isAuthReady) {
-            startMockDataLoad();
-            return;
-        }
-        
-        // 1. Listen for Public City Data (Mock Seeding)
-        const cityCollectionPath = getPublicCollectionPath('cities_weather');
-        
-        // Only seed data if we are using the mock config OR the Canvas config
-        if (firebaseConfig === MOCK_FIREBASE_CONFIG || typeof __firebase_config !== 'undefined') {
-            try {
-                const tokyoDocRef = doc(db, cityCollectionPath, 'tokyo');
-                const docSnap = await getDoc(tokyoDocRef); 
+        // Map data into an accessible structure
+        const countryMap = new Map(mockCountryData.map(d => [d.iso3, d]));
 
-                if (!docSnap.exists()) {
-                    await Promise.all(getMockData().map(city => 
-                        setDoc(doc(db, cityCollectionPath, city.id), city)
-                    ));
-                    console.log("Mock city data seeded to Firestore.");
-                }
-            } catch (e) {
-                console.error("Error during Firestore city data seeding, falling back to in-memory mock:", e);
-                startMockDataLoad();
-                // Continue to setup snapshot listeners, they will fail silently if connection is bad
+        // Function to determine the fill color based on category
+        const getFillColor = (data) => {
+            if (!data) return '#E5E7EB'; // Default gray for no data
+            
+            switch (data.category) {
+                case 'Very High': return "#10B981";
+                case 'High': return "#34D399";
+                case 'Medium': return "#FBBF24";
+                case 'Low': return "#F87171";
+                default: return '#E5E7EB';
             }
-        }
-
-        // Setup the real-time listener for public city data
-        onSnapshot(collection(db, cityCollectionPath), (snapshot) => {
-            currentCitiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            updateDashboard(); 
-        }, (error) => {
-            console.error("Firestore City Snapshot Error, falling back to in-memory mock:", error);
-            document.getElementById('loading-message').textContent = `Error loading data (check permissions). Falling back to mock data.`;
-            startMockDataLoad();
-        });
-
-
-        // 2. Listen for Private User Favorites (Only if a userId exists)
-        if (userId) {
-            const favoritesCollectionPath = getPrivateCollectionPath('favorites');
-            if (favoritesCollectionPath) {
-                // Ordering by timestamp ensures the newest saved comparison appears first
-                const favoritesQuery = collection(db, favoritesCollectionPath); // Cannot use orderBy due to complexity rule.
-                
-                onSnapshot(favoritesQuery, (snapshot) => {
-                    savedComparisons = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Sort locally since Firestore orderBy is restricted
-                    savedComparisons.sort((a, b) => b.timestamp - a.timestamp); 
-                    renderSavedComparisons(); 
-                }, (error) => {
-                    console.error("Firestore Favorites Snapshot Error:", error);
-                    document.getElementById('loading-favorites').textContent = `Error loading your favorites.`;
-                });
-            }
-        }
-    }
-    
-    // --- Favorites Logic ---
-    async function saveComparison() {
-        const city1 = findCity(searchCity1);
-        const city2 = findCity(searchCity2);
-
-        if (!city1 || !city2 || city1.id === city2.id) {
-            showModal('Please select two distinct cities to save.', 'error');
-            return;
-        }
-
-        const favoritesCollectionPath = getPrivateCollectionPath('favorites');
-        if (!favoritesCollectionPath) {
-            showModal('Authentication error. Cannot save favorites.', 'error');
-            return;
-        }
-
-        const comparisonData = {
-            city1Name: city1.name,
-            city2Name: city2.name,
-            timestamp: Date.now() 
         };
 
-        try {
-            // Generate a unique ID based on city names for easy lookup/overwrite (optional: use UUID instead)
-            const docId = `${city1.id}_vs_${city2.id}`; 
-            const docRef = doc(db, favoritesCollectionPath, docId);
+        // --- Custom Map SVG Path Data ---
+        // A minimal set of complex country paths (d attribute) for demonstration, using the ISO3 as the ID.
+        // NOTE: The original massive string has been removed and replaced with representative paths for the countries in the mock data.
+        const svgPathData = [
+            // North America
+            { id: "CAN", d: "M150 100 L250 100 L270 150 L180 140 Z" },
+            { id: "USA", d: "M180 140 L270 150 L300 200 L200 180 Z" },
+            { id: "MEX", d: "M200 180 L300 200 L320 250 L220 220 Z" },
+            // South America
+            { id: "BRA", d: "M350 350 L400 300 L450 400 L380 450 Z" },
+            // Europe
+            { id: "GBR", d: "M550 150 L560 170 L540 180 L530 160 Z" },
+            { id: "FRA", d: "M560 180 L600 180 L600 220 L560 220 Z" },
+            { id: "DEU", d: "M600 180 L640 180 L640 210 L600 210 Z" },
+            { id: "ITA", d: "M610 210 L620 250 L640 240 L630 200 Z" },
+            { id: "ESP", d: "M550 220 L600 220 L600 260 L550 260 Z" },
+            { id: "PRT", d: "M530 230 L550 230 L550 250 L530 250 Z" },
+            { id: "RUS", d: "M650 100 L850 100 L900 300 L700 350 L650 200 Z" },
+            // Asia
+            { id: "CHN", d: "M750 350 L850 350 L880 400 L780 450 Z" },
+            { id: "IND", d: "M700 450 L750 480 L730 520 L680 500 Z" },
+            { id: "JPN", d: "M900 200 L920 220 L910 240 L890 220 Z" },
+            // Africa
+            { id: "NGA", d: "M450 350 L500 350 L510 400 L460 400 Z" },
+            { id: "ZAF", d: "M480 480 L520 480 L520 520 L480 520 Z" },
+            // Oceania
+            { id: "AUS", d: "M800 500 L850 500 L870 550 L820 550 Z" }
+        ];
+
+        const svgMap = document.getElementById('world-map-svg');
+        const tooltip = document.getElementById('tooltip');
+        const countryNameEl = document.getElementById('country-name');
+        const countryScoreEl = document.getElementById('country-score');
+        const countryCategoryEl = document.getElementById('country-category');
+
+        // Function to update the detail card
+        function updateDetails(data) {
+            if (data) {
+                countryNameEl.textContent = data.name;
+                countryScoreEl.textContent = `Score: ${data.score}`;
+                countryCategoryEl.textContent = `Category: ${data.category}`;
+                // Optional: set text color based on category
+                countryCategoryEl.className = `text-md font-medium mt-2 text-[${getFillColor(data)}]`;
+            } else {
+                countryNameEl.textContent = 'Hover over a country';
+                countryScoreEl.textContent = 'Score: N/A';
+                countryCategoryEl.textContent = 'Category: N/A';
+                countryCategoryEl.className = 'text-md font-medium mt-2';
+            }
+        }
+        
+        // Initialize details to empty state
+        updateDetails(null);
+
+        // --- MAP RENDERING ---
+        svgPathData.forEach(country => {
+            const countryData = countryMap.get(country.id);
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
             
-            await setDoc(docRef, comparisonData, { merge: true });
+            path.setAttribute('d', country.d);
+            path.setAttribute('data-iso3', country.id);
+            path.classList.add('country-path');
+            path.style.fill = getFillColor(countryData);
+            
+            // Mouse Events
+            path.addEventListener('mouseover', (e) => {
+                const data = countryMap.get(e.target.getAttribute('data-iso3'));
+                
+                // Update detail card
+                updateDetails(data);
+                
+                // Show tooltip
+                tooltip.textContent = data ? `${data.name} (${data.score})` : `${country.id} (No Data)`;
+                tooltip.style.opacity = 1;
+            });
 
-            showModal(`Comparison (${city1.name} vs. ${city2.name}) saved!`, 'success');
-        } catch (e) {
-            console.error("Error saving comparison:", e);
-            showModal('Failed to save comparison to Firestore.', 'error');
-        }
-    }
+            path.addEventListener('mousemove', (e) => {
+                // Position tooltip near the cursor
+                tooltip.style.left = `${e.clientX + 10}px`;
+                tooltip.style.top = `${e.clientY + 10}px`;
+            });
 
-    async function deleteComparison(docId) {
-        const favoritesCollectionPath = getPrivateCollectionPath('favorites');
-        if (!favoritesCollectionPath) {
-            showModal('Authentication error. Cannot delete favorite.', 'error');
-            return;
-        }
+            path.addEventListener('mouseout', () => {
+                // Hide tooltip and reset details
+                tooltip.style.opacity = 0;
+                updateDetails(null);
+            });
 
-        try {
-            const docRef = doc(db, favoritesCollectionPath, docId);
-            await deleteDoc(docRef);
-            showModal('Favorite comparison deleted.', 'success');
-        } catch (e) {
-            console.error("Error deleting comparison:", e);
-            showModal('Failed to delete comparison from Firestore.', 'error');
-        }
-    }
-
-</script>
+            svgMap.appendChild(path);
+        });
+    </script>
 </body>
 </html>
