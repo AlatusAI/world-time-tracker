@@ -3,328 +3,866 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Time & Weather Tracker</title>
+    <title>Global Time & Weather Tracker: World Traveler's Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #1a202c;
-        }
-        .tracker-card {
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(10px);
-            background-color: rgba(30, 41, 59, 0.9);
-        }
-        .info-card {
-            background-color: rgba(56, 189, 248, 1);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.3s ease;
-        }
-        .info-card.error {
-            background-color: #f87171; /* Red for error state */
-        }
-        .info-card:hover {
-            transform: translateY(-2px);
-        }
-        input[type="text"] {
-            border: none;
-            outline: none;
-            background-color: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            font-weight: 600;
-        }
-        input[type="text"]::placeholder {
-            color: rgba(255, 255, 255, 0.6);
-        }
-        .loader {
-            border-top-color: #ffffff;
-            -webkit-animation: spin 1s linear infinite;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-</head>
-<body class="min-h-screen flex items-center justify-center p-4">
-
-    <div id="app" class="w-full max-w-5xl text-white">
-        <header class="text-center mb-12">
-            <h1 class="text-4xl font-extrabold tracking-tight text-white">Global Time & Weather Tracker</h1>
-            <p class="text-lg text-gray-400 mt-2">A vital tool for world travelers and global businesses. Compare local time, weather, and locations instantly.</p>
-        </header>
-
-        <div class="tracker-card p-6 sm:p-10 rounded-2xl">
-            <!-- City Input Fields -->
-            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6 mb-8">
-                <input type="text" id="city1Input" value="Porto" placeholder="Search City 1 (e.g., London)"
-                       class="flex-grow p-4 rounded-xl text-xl transition duration-300 focus:ring-sky-500 focus:ring-2 focus:bg-gray-700"
-                       onchange="fetchCityData(1)">
-                <input type="text" id="city2Input" value="Dili" placeholder="Search City 2 (e.g., New York)"
-                       class="flex-grow p-4 rounded-xl text-xl transition duration-300 focus:ring-sky-500 focus:ring-2 focus:bg-gray-700"
-                       onchange="fetchCityData(2)">
-            </div>
-
-            <!-- Weather/Time Display Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Card 1: Porto -->
-                <div id="city1Card" class="info-card p-6 rounded-xl">
-                    <div class="flex items-center space-x-3 mb-2">
-                        <svg id="city1Icon" class="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                        </svg>
-                        <div>
-                            <p class="text-3xl font-bold" id="city1Name">Porto</p>
-                            <p class="text-sm font-light" id="city1Country">Portugal</p>
-                        </div>
-                    </div>
-                    <p class="text-5xl font-extrabold my-4" id="city1Time">--:--</p>
-                    <div class="text-sm font-medium space-y-1">
-                        <div class="flex justify-between"><span>Temp:</span> <span id="city1Temp">--°C</span></div>
-                        <div class="flex justify-between"><span>Condition:</span> <span id="city1Condition">Loading...</span></div>
-                        <div class="flex justify-between"><span>Updated:</span> <span id="city1Updated">--:--</span></div>
-                    </div>
-                </div>
-
-                <!-- Card 2: Dili (Placeholder) -->
-                <div id="city2Card" class="info-card p-6 rounded-xl bg-sky-600">
-                    <div class="flex items-center space-x-3 mb-2">
-                        <svg id="city2Icon" class="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                        </svg>
-                        <div>
-                            <p class="text-3xl font-bold" id="city2Name">Dili</p>
-                            <p class="text-sm font-light" id="city2Country">Timor-Leste</p>
-                        </div>
-                    </div>
-                    <p class="text-5xl font-extrabold my-4" id="city2Time">--:--</p>
-                    <div class="text-sm font-medium space-y-1">
-                        <div class="flex justify-between"><span>Temp:</span> <span id="city2Temp">--°C</span></div>
-                        <div class="flex justify-between"><span>Condition:</span> <span id="city2Condition">Loading...</span></div>
-                        <div class="flex justify-between"><span>Updated:</span> <span id="city2Updated">--:--</span></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- World Map Base -->
-            <div id="mapBase" class="mt-8 text-center p-8 bg-gray-700 rounded-xl text-4xl font-black opacity-80 min-h-[200px] flex items-center justify-center">
-                WORLD MAP VISUALIZATION AREA
-            </div>
-            <div id="mapStatus" class="mt-4 text-center text-gray-400">
-                Data for the map visualization will appear here soon.
-            </div>
-
-        </div>
-    </div>
+    <!-- Three.js is used for the interactive 3D globe visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Firebase SDK Imports for real-time data and authentication -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     
-    <script>
-        const apiKey = "";
-        const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=" + apiKey;
+        // Enable Firestore debug logging
+        setLogLevel('debug'); 
 
-        // Elements mapping
-        const elements = {
-            1: { 
-                input: document.getElementById('city1Input'),
-                card: document.getElementById('city1Card'),
-                icon: document.getElementById('city1Icon'),
-                name: document.getElementById('city1Name'),
-                country: document.getElementById('city1Country'),
-                time: document.getElementById('city1Time'),
-                temp: document.getElementById('city1Temp'),
-                condition: document.getElementById('city1Condition'),
-                updated: document.getElementById('city1Updated')
-            },
-            2: { 
-                input: document.getElementById('city2Input'),
-                card: document.getElementById('city2Card'),
-                icon: document.getElementById('city2Icon'),
-                name: document.getElementById('city2Name'),
-                country: document.getElementById('city2Country'),
-                time: document.getElementById('city2Time'),
-                temp: document.getElementById('city2Temp'),
-                condition: document.getElementById('city2Condition'),
-                updated: document.getElementById('city2Updated')
-            }
-        };
+        // --- Global Variables (Provided by environment or defined) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        // Utility to handle JSON parsing
-        function extractJson(text) {
-            try {
-                // Find the first and last curly braces to isolate the JSON block
-                const jsonStart = text.indexOf('{');
-                const jsonEnd = text.lastIndexOf('}') + 1;
-                // Check if braces were found and are in the correct order
-                if (jsonStart === -1 || jsonEnd === 0 || jsonEnd <= jsonStart) {
-                     console.error("JSON extraction failed: Braces not found or misplaced.");
-                     return null;
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+        let isAuthReady = false;
+        let currentCitiesData = []; 
+        let searchCity1 = ''; 
+        let searchCity2 = ''; 
+        let timeUpdateInterval; 
+        
+        // --- THREE.js Global Variables ---
+        let scene, camera, renderer, globe, pinGroup;
+        const GLOBE_RADIUS = 200; // Size of the sphere
+        const mapContainer = document.getElementById('map-container');
+        const pinPopupContainer = document.getElementById('pin-popup-container');
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        const rotationSpeed = 0.005;
+
+        // --- Utility Functions ---
+
+        /**
+        * Safely constructs the Firestore public collection path.
+        */
+        function getPublicCollectionPath(collectionName) {
+            return `artifacts/${appId}/public/data/${collectionName}`;
+        }
+
+        /**
+        * Implements exponential backoff for retrying an async operation.
+        */
+        async function retryWithBackoff(fn, maxRetries = 5, delay = 1000) {
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    return await fn();
+                } catch (error) {
+                    if (attempt === maxRetries - 1) {
+                        throw error;
+                    }
+                    console.warn(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; 
                 }
-                const jsonString = text.substring(jsonStart, jsonEnd);
-                return JSON.parse(jsonString);
-            } catch (e) {
-                console.error("Failed to parse JSON from model response:", e, text);
-                return null;
+            }
+        }
+
+        /**
+        * Calculates and formats the city's current local time based on the UTC offset.
+        */
+        function getCityLocalTime(offsetHours) {
+            const now = new Date();
+            // Convert current local time to UTC time
+            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000); 
+            // Apply city's offset
+            const cityLocalTimeMs = utcTime + (offsetHours * 3600000); 
+            const cityDate = new Date(cityLocalTimeMs);
+
+            return cityDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+        
+        // --- THREE.js Functions ---
+
+        /**
+        * Converts Latitude and Longitude to 3D Cartesian coordinates on the globe surface.
+        */
+        function latLonToCartesian(lat, lon) {
+            const phi = (90 - lat) * (Math.PI / 180); // Polar angle (from North pole)
+            const theta = (lon + 180) * (Math.PI / 180); // Azimuthal angle (from -180 lon)
+
+            const x = -(GLOBE_RADIUS * Math.sin(phi) * Math.cos(theta));
+            const z = (GLOBE_RADIUS * Math.sin(phi) * Math.sin(theta));
+            const y = (GLOBE_RADIUS * Math.cos(phi));
+
+            return new THREE.Vector3(x, y, z);
+        }
+        
+        /**
+        * Converts a 3D world position to 2D screen coordinates for HTML pop-up placement.
+        */
+        function worldToScreen(vector) {
+            if (!camera || !renderer) return { x: 0, y: 0, visible: false };
+
+            const tempV = vector.clone();
+            tempV.project(camera);
+
+            const rect = mapContainer.getBoundingClientRect();
+            const x = (tempV.x * 0.5 + 0.5) * rect.width;
+            const y = (-tempV.y * 0.5 + 0.5) * rect.height;
+
+            // Check if the pin is visible (in front of the camera, Z component must be less than 1 after projection)
+            return { 
+                x: x, 
+                y: y, 
+                visible: tempV.z < 1
+            };
+        }
+        
+        /**
+        * Initializes the Three.js scene, camera, and renderer.
+        */
+        function initThreeJS() {
+            // 1. Scene setup
+            scene = new THREE.Scene();
+            
+            // 2. Camera setup (Perspective camera)
+            camera = new THREE.PerspectiveCamera(75, mapContainer.clientWidth / mapContainer.clientHeight, 0.1, 1000);
+            camera.position.z = GLOBE_RADIUS * 2.5; // Zoomed out a bit
+            
+            // 3. Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(mapContainer.clientWidth, mapContainer.clientHeight);
+            renderer.setClearColor(0x000000, 0); // Transparent background for the canvas
+            mapContainer.appendChild(renderer.domElement);
+            
+            // 4. Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 5); // soft white light
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+            directionalLight.position.set(100, 100, 100);
+            scene.add(directionalLight);
+            
+            // 5. Globe (The Sphere)
+            const globeGeometry = new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64);
+            // Simple dark blue material for the globe
+            const globeMaterial = new THREE.MeshPhongMaterial({
+                color: 0x223355, 
+                specular: 0x111111,
+                shininess: 30,
+                transparent: true,
+                opacity: 0.9,
+                wireframe: false 
+            });
+            globe = new THREE.Mesh(globeGeometry, globeMaterial);
+            scene.add(globe);
+            
+            // 6. Pin Group (container for all city pins)
+            pinGroup = new THREE.Group();
+            globe.add(pinGroup);
+            
+            // Initial rotation for better view
+            globe.rotation.y = THREE.MathUtils.degToRad(60); 
+
+            // Handle resizing
+            window.addEventListener('resize', onWindowResize, false);
+            
+            // Start animation loop
+            animateGlobe();
+            
+            // Setup interaction
+            setupGlobeInteraction();
+        }
+        
+        /**
+        * Handles window resizing to update the camera and renderer size.
+        */
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+
+            camera.aspect = mapContainer.clientWidth / mapContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(mapContainer.clientWidth, mapContainer.clientHeight);
+            
+            // Re-render pins on resize to adjust HTML pop-up positions
+            updatePinAndCardPositions();
+        }
+
+        /**
+        * The main rendering loop for three.js.
+        */
+        function animateGlobe() {
+            requestAnimationFrame(animateGlobe);
+            
+            if (renderer) {
+                // Constant subtle rotation when not dragging
+                if (!isDragging) {
+                    globe.rotation.y += 0.0005;
+                }
+                
+                // Update the positions of the HTML pop-ups to match the 3D pin locations
+                updatePinAndCardPositions();
+                
+                renderer.render(scene, camera);
             }
         }
         
-        function updateUI(slot, data) {
-            const el = elements[slot];
+        /**
+        * Adds mouse/touch drag functionality to rotate the globe.
+        */
+        function setupGlobeInteraction() {
+            const canvas = renderer.domElement;
             
-            // Remove error state
-            el.card.classList.remove('error');
+            const onMouseDown = (e) => {
+                // Check if the event is a touch event or a mouse button click
+                const clientX = e.clientX || e.touches?.[0]?.clientX;
+                const clientY = e.clientY || e.touches?.[0]?.clientY;
+
+                if (clientX === undefined || clientY === undefined) return;
+
+                isDragging = true;
+                previousMousePosition = { x: clientX, y: clientY };
+                canvas.style.cursor = 'grabbing';
+                e.preventDefault(); // Prevent default touch behavior
+            };
+
+            const onMouseUp = () => {
+                isDragging = false;
+                canvas.style.cursor = 'grab';
+            };
+
+            const onMouseMove = (e) => {
+                if (!isDragging) return;
+
+                const clientX = e.clientX || e.touches?.[0]?.clientX;
+                const clientY = e.clientY || e.touches?.[0]?.clientY;
+
+                if (clientX === undefined || clientY === undefined) return;
+
+                const deltaX = clientX - previousMousePosition.x;
+                const deltaY = clientY - previousMousePosition.y;
+
+                // Horizontal rotation (Y-axis)
+                globe.rotation.y += deltaX * rotationSpeed;
+                
+                // Vertical rotation (X-axis, clamped to prevent gimbal lock/flipping)
+                const newRotationX = globe.rotation.x + deltaY * rotationSpeed;
+                // Clamp X rotation to a reasonable range (e.g., -90 deg to +90 deg)
+                globe.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, newRotationX));
+
+                previousMousePosition = { x: clientX, y: clientY };
+            };
+
+            // Add mouse listeners
+            canvas.addEventListener('mousedown', onMouseDown, false);
+            window.addEventListener('mouseup', onMouseUp, false); 
+            window.addEventListener('mousemove', onMouseMove, false);
             
-            if (!data || data.error) {
-                el.card.classList.add('error');
-                el.name.textContent = el.input.value || "City";
-                el.country.textContent = "Data Error";
-                el.time.textContent = "--:--";
-                el.temp.textContent = "--°C";
-                el.condition.textContent = "Failed to fetch data.";
-                el.updated.textContent = new Date().toLocaleTimeString();
-                el.icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.332 16c-.77 1.333.192 3 1.732 3z"/>'; // Warning Icon
+            // Add touch listeners for mobile responsiveness
+            canvas.addEventListener('touchstart', onMouseDown, false);
+            window.addEventListener('touchend', onMouseUp, false);
+            window.addEventListener('touchmove', onMouseMove, false);
+            
+            // Initial cursor style
+            canvas.style.cursor = 'grab';
+        }
+
+        /**
+        * Renders the 3D pins on the globe for the two selected cities.
+        */
+        function render3DPins() {
+            // Clear old pins
+            while (pinGroup.children.length > 0) {
+                pinGroup.remove(pinGroup.children[0]);
+            }
+            
+            const city1 = findCity(searchCity1);
+            const city2 = findCity(searchCity2);
+            
+            const citiesToPin = [];
+            if (city1 && city1.lat && city1.lon) citiesToPin.push(city1);
+            // Ensure city 2 is different from city 1
+            if (city2 && city2.lat && city2.lon && city1?.id !== city2?.id) citiesToPin.push(city2);
+
+            // Pin Geometry (Simple cone pin)
+            const pinGeometry = new THREE.ConeGeometry(8, 20, 32);
+            const pinMaterial1 = new THREE.MeshBasicMaterial({ color: 0xff4136 }); // Red for city 1
+            const pinMaterial2 = new THREE.MeshBasicMaterial({ color: 0x4f46e5 }); // Indigo for city 2
+
+            citiesToPin.forEach((city, index) => {
+                const position = latLonToCartesian(city.lat, city.lon);
+                
+                const pinMesh = new THREE.Mesh(
+                    pinGeometry, 
+                    index === 0 ? pinMaterial1 : pinMaterial2
+                );
+                
+                pinMesh.position.copy(position);
+                
+                // Orient the pin to point outward from the globe center
+                pinMesh.lookAt(new THREE.Vector3(0, 0, 0));
+                pinMesh.rotateX(Math.PI / 2); // Rotate to stand upright on the surface
+
+                // Store city data on the mesh for pop-up tracking
+                pinMesh.userData.cityId = city.id;
+                pinMesh.userData.position = position;
+                
+                pinGroup.add(pinMesh);
+            });
+        }
+
+        /**
+        * Generates the HTML for a single city card. This card is now used as a dynamic pop-up.
+        */
+        function generateCityCardHTML(city) {
+            if (!city) {
+                return `
+                    <div class="p-4 rounded-xl bg-gray-700 shadow-inner text-center text-gray-400 min-h-[16rem] flex items-center justify-center">
+                        <p class="text-lg font-medium">City not found or selected.</p>
+                    </div>
+                `;
+            }
+            
+            const temperature = city.weather?.temp ?? 'N/A';
+            const condition = city.weather?.condition ?? 'Unknown';
+            const lastUpdated = city.lastUpdated ? new Date(city.lastUpdated).toLocaleTimeString() : 'N/A';
+
+            const localTime = getCityLocalTime(city.timezoneOffset);
+
+            let icon = '';
+            let iconClass = '';
+            if (!city.weather) { icon = '❓'; } 
+            else if (condition.includes('Sunny') || condition.includes('Clear')) { 
+                icon = '☀️'; 
+                iconClass = 'animated-sun';
+            } 
+            else if (condition.includes('Cloudy') || condition.includes('Haze') || condition.includes('Overcast')) { 
+                icon = '☁️'; 
+                iconClass = 'text-gray-400';
+            } 
+            else if (condition.includes('Rain') || condition.includes('Showers')) { 
+                icon = '🌧️'; 
+                iconClass = 'text-blue-400'; 
+            } else if (condition.includes('Snow') || condition.includes('Chilly')) {
+                icon = '❄️';
+            }
+
+            return `
+                <div id="popup-content-${city.id}" 
+                    class="card p-4 rounded-xl shadow-2xl backdrop-blur-sm bg-gray-700/80 hover:bg-gray-700 transition duration-300"
+                    data-city-id="${city.id}"
+                    data-city-offset="${city.timezoneOffset}"
+                >
+                    <div class="card-content">
+                        <div>
+                            <div class="text-4xl mb-2 text-white ${iconClass}">${icon}</div>
+                            <h2 class="text-2xl font-extrabold text-white truncate">${city.name}</h2>
+                            <p class="text-sm text-gray-300">${city.country}</p>
+                        </div>
+                        <div class="mt-4 pt-2 border-t border-gray-600">
+                            <div class="flex justify-between items-center text-white mb-2 pb-1 border-b border-gray-600">
+                                <span class="font-medium text-lg">Local Time:</span>
+                                <span class="text-2xl font-bold text-indigo-400" id="time-${city.id}">${localTime}</span>
+                            </div>
+
+                            <div class="flex justify-between items-center text-white">
+                                <span class="font-medium">Temperature:</span>
+                                <span class="text-lg font-bold">${temperature}°C</span>
+                            </div>
+                            <div class="flex justify-between items-center text-white mt-1">
+                                <span class="font-medium">Condition:</span>
+                                <span class="text-sm">${condition}</span>
+                            </div>
+                            <div class="flex justify-between items-center text-gray-400 mt-3 text-xs border-t border-gray-700 pt-2">
+                                <span>Last Updated:</span>
+                                <span class="font-semibold">${lastUpdated}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+        * Renders the two comparison cities as HTML pop-up cards.
+        */
+        function renderHtmlPopups() {
+            const city1 = findCity(searchCity1);
+            const city2 = findCity(searchCity2);
+            
+            let htmlContent = '';
+            
+            if (city1 && city1.lat && city1.lon) {
+                htmlContent += `<div id="popup-${city1.id}" class="city-card-popup">${generateCityCardHTML(city1)}</div>`;
+            }
+            if (city2 && city2.lat && city2.lon && city1?.id !== city2?.id) {
+                htmlContent += `<div id="popup-${city2.id}" class="city-card-popup">${generateCityCardHTML(city2)}</div>`;
+            }
+
+            pinPopupContainer.innerHTML = htmlContent;
+        }
+        
+        /**
+        * Updates the position of the HTML pop-up cards based on their 3D pin locations.
+        */
+        function updatePinAndCardPositions() {
+            if (!pinGroup) return;
+
+            pinGroup.children.forEach(pin => {
+                const cityId = pin.userData.cityId;
+                const popupElement = document.getElementById(`popup-${cityId}`);
+
+                if (popupElement) {
+                    // Get the world position of the pin's base (or where the pin touches the globe)
+                    const worldPosition = pin.userData.position.clone();
+                    // Get the screen position from the world position
+                    const { x, y, visible } = worldToScreen(worldPosition);
+
+                    if (visible) {
+                        popupElement.classList.add('active');
+                        // Positioning the pop-up centered horizontally and anchored above the pin position
+                        popupElement.style.left = `${x}px`;
+                        popupElement.style.top = `${y}px`;
+                        // Translate to center the card anchor point on the pin position (x-axis)
+                        // and shift it up (-100% of its own height) to sit above the pin location
+                        popupElement.style.transform = `translate(-50%, -100%)`; 
+                    } else {
+                        popupElement.classList.remove('active');
+                    }
+                }
+            });
+        }
+
+        /**
+        * Renders the full list of cities in the collapsible detail area.
+        */
+        function renderAllCities() {
+            const cityList = document.getElementById('city-list');
+            const loadingMessage = document.getElementById('loading-message');
+            
+            if (loadingMessage) {
+                loadingMessage.style.display = 'none';
+            }
+
+            if (currentCitiesData.length === 0) {
+                cityList.innerHTML = `<p class="col-span-full text-center text-gray-500">No city data available.</p>`;
                 return;
             }
 
-            el.name.textContent = data.city || "N/A";
-            el.country.textContent = data.country || "N/A";
-            el.time.textContent = data.localTime || "--:--";
-            el.temp.textContent = data.temperature || "--°C";
-            el.condition.textContent = data.condition || "N/A";
-            el.updated.textContent = new Date().toLocaleTimeString();
-            
-            // Simple icon selection based on condition (very basic)
-            const conditionLower = (data.condition || '').toLowerCase();
-            let iconD = 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.332 16c-.77 1.333.192 3 1.732 3z"'; // Default Warning
-            
-            if (conditionLower.includes('sun') || conditionLower.includes('clear')) {
-                iconD = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z'; // Sun
-            } else if (conditionLower.includes('cloud') || conditionLower.includes('overcast')) {
-                iconD = 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z'; // Cloud
-            } else if (conditionLower.includes('rain') || conditionLower.includes('shower')) {
-                iconD = 'M7 16l-2.5-2.5m5 0L10 16m9-10h-2.5m-5 0h-2.5m-5 0H5a2 2 0 00-2 2v2a2 2 0 002 2h14a2 2 0 002-2v-2a2 2 0 00-2-2h-2.5m0 0l-1.5-1.5M12 11V5'; // Rain
-            }
-
-            el.icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconD}"/>`;
-        }
-
-        function setLoading(slot, isLoading) {
-            const el = elements[slot];
-            if (isLoading) {
-                el.time.innerHTML = `<div class="w-10 h-10 border-4 border-white border-solid rounded-full loader mx-auto"></div>`;
-                el.condition.textContent = "Fetching...";
-                el.temp.textContent = "--°C";
-                el.country.textContent = "Searching...";
-                el.updated.textContent = "--:--";
-                el.card.classList.remove('error');
-            }
-        }
-
-        async function fetchWithRetry(url, options, retries = 3) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (!response.ok) {
-                        // Throw an error with status text for better debugging
-                        const errorBody = await response.text();
-                        console.error(`Attempt ${i + 1} failed with status: ${response.status}`, errorBody);
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response;
-                } catch (error) {
-                    if (i === retries - 1) throw error; 
-                    const delay = Math.pow(2, i) * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-            throw new Error("Fetch failed after all retries.");
-        }
-
-        async function fetchCityData(slot) {
-            const cityName = elements[slot].input.value.trim();
-            if (!cityName) return;
-
-            setLoading(slot, true);
-
-            // Refined query to be very specific
-            const userQuery = `Current local time, temperature in Celsius, weather condition, and full country name for the city: ${cityName}.`;
-            
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                tools: [{ "google_search": {} }],
-                systemInstruction: {
-                    // UPDATED: Added specific command for JSON output only
-                    parts: [{ text: "You are a specialized data retrieval agent for real-time weather and time. You MUST ONLY respond with a single JSON object that conforms exactly to the provided JSON schema. Do not include any introductory text, explanatory text, markdown formatting (like ```json), or commentary outside of the JSON block itself. Use Google Search to get the CURRENT, real-time data. For 'city', use the primary city name found. If a data field is unavailable, use 'N/A'." }]
-                },
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            "city": { "type": "STRING", "description": "The name of the city requested (e.g., London)." },
-                            "country": { "type": "STRING", "description": "The full country name (e.g., United Kingdom)." },
-                            "localTime": { "type": "STRING", "description": "The current local time (e.g., 2:30 PM)." },
-                            "temperature": { "type": "STRING", "description": "The current temperature with unit (e.g., 19°C or N/A)." },
-                            "condition": { "type": "STRING", "description": "A brief description of the current weather (e.g., Partly Cloudy or N/A)." }
-                        },
-                        "propertyOrdering": ["city", "country", "localTime", "temperature", "condition"]
-                    }
-                }
-            };
-            
-            let jsonText = null;
-
-            try {
-                const response = await fetchWithRetry(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                const result = await response.json();
-                const candidate = result.candidates?.[0];
-
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    jsonText = candidate.content.parts[0].text;
-                    const data = extractJson(jsonText);
-                    if (data) {
-                        updateUI(slot, data);
-                    } else {
-                        // JSON extraction failed
-                        updateUI(slot, { error: "JSON parse failed" });
-                        // Log the raw text for debugging what caused the failure
-                        console.error("DEBUG: Model returned text but JSON parsing failed. Raw Text:", jsonText); 
-                    }
-                } else {
-                    // No candidate or no text part in the response
-                    updateUI(slot, { error: "No model response text" });
-                    console.error("Model response lacked text candidate:", result);
-                }
-
-            } catch (error) {
-                console.error(`Final Error fetching data for city ${slot}:`, error);
-                
-                // If we have the raw text from the model, log it one last time during the final catch block
-                if (jsonText) {
-                     console.error("DEBUG: Raw model text leading to exception was:", jsonText);
-                }
-
-                if (error.message.includes("JSON parse failed")) {
-                    updateUI(slot, { error: "JSON parse error after fetch" });
-                } else {
-                    updateUI(slot, { error: "Network or API connection error" });
-                }
-            }
+            const cityElements = currentCitiesData.map(city => 
+                `<div class="rounded-xl shadow-lg border border-gray-700">
+                    ${generateCityCardHTML(city)}
+                </div>`
+            ).join('');
+            cityList.innerHTML = cityElements;
         }
         
-        // Initial load
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchCityData(1);
-            fetchCityData(2);
+        // --- Data Management and Auth Setup ---
+
+        if (firebaseConfig) {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    document.getElementById('user-info').textContent = `User ID: ${user.uid} (Authenticated)`;
+                } else if (userId) {
+                    document.getElementById('user-info').textContent = `User ID: ${userId} (Fallback)`;
+                }
+            });
+            
+            (async () => {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    
+                    const user = auth.currentUser;
+                    userId = user?.uid || crypto.randomUUID();
+                    isAuthReady = true;
+
+                    document.getElementById('user-info').textContent = `User ID: ${userId} (Authenticated)`;
+
+                    // Initialize 3D scene after the container is ready
+                    initThreeJS();
+                    
+                    retryWithBackoff(startDataListener)
+                        .catch(error => {
+                            console.error("Critical error starting data listener after retries:", error);
+                            document.getElementById('loading-message').textContent = `CRITICAL ERROR: Failed to connect to database.`;
+                        });
+
+                } catch (error) {
+                    console.error("Firebase Auth Error:", error);
+                    userId = crypto.randomUUID(); 
+                    isAuthReady = true;
+                    document.getElementById('user-info').textContent = `Auth Error. Fallback ID: ${userId}`;
+                }
+            })();
+
+
+        } else {
+            document.getElementById('user-info').textContent = 'Error: Firebase configuration missing.';
+        }
+
+        /**
+         * Finds a city by exact name match (case-insensitive) or starts-with match.
+         */
+        function findCity(term) {
+            if (!term) return undefined;
+            const normalizedTerm = term.toLowerCase().trim();
+            // Try to find an exact match first
+            const exactMatch = currentCitiesData.find(city => city.name.toLowerCase() === normalizedTerm);
+            if (exactMatch) return exactMatch;
+            // Fallback to finding a city whose name starts with the search term
+            return currentCitiesData.find(city => city.name.toLowerCase().startsWith(normalizedTerm));
+        }
+
+        /**
+         * Triggers all UI updates for the dashboard, map, and list.
+         */
+        function updateDashboard() {
+            render3DPins(); 
+            renderHtmlPopups(); 
+            renderAllCities(); 
+            startClock(); 
+        }
+        
+        /**
+         * Starts the interval to update all on-screen clocks every minute.
+         */
+        function startClock() {
+            if (timeUpdateInterval) {
+                clearInterval(timeUpdateInterval);
+            }
+
+            const updateClocks = () => {
+                // Select all elements with an ID starting with 'time-'
+                const timeElements = document.querySelectorAll('[id^="time-"]');
+                timeElements.forEach(timeElement => {
+                    const cityId = timeElement.id.split('-')[1];
+                    // Find the parent element containing the offset data
+                    const cityCard = document.querySelector(`[data-city-id="${cityId}"]`);
+
+                    if (cityCard) {
+                        const offset = parseFloat(cityCard.getAttribute('data-city-offset'));
+                        if (!isNaN(offset)) {
+                            timeElement.textContent = getCityLocalTime(offset);
+                        }
+                    }
+                });
+            };
+            
+            updateClocks();
+            // Update every 60 seconds (1 minute) for efficiency, since we only show H:MM
+            timeUpdateInterval = setInterval(updateClocks, 60000); 
+        }
+        
+        /**
+         * Sets up the search input with autocomplete functionality.
+         */
+        function setupAutocomplete(inputId, suggestionsId) {
+            const input = document.getElementById(inputId);
+            const suggestionsContainer = document.getElementById(suggestionsId);
+            
+            // Close suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (e.target !== input && !suggestionsContainer.contains(e.target)) {
+                    suggestionsContainer.classList.add('hidden');
+                }
+            });
+
+            input.addEventListener('input', () => {
+                const query = input.value.trim().toLowerCase();
+                suggestionsContainer.innerHTML = '';
+                
+                if (query.length < 2) {
+                    suggestionsContainer.classList.add('hidden');
+                    // Clear searchCity variable if input is cleared
+                    if (inputId === 'city-search-1') {
+                        searchCity1 = '';
+                    } else {
+                        searchCity2 = '';
+                    }
+                    updateDashboard();
+                    return;
+                }
+
+                // Filter based on city name or country name
+                const filteredCities = currentCitiesData.filter(city => 
+                    city.name.toLowerCase().includes(query) || 
+                    city.country.toLowerCase().includes(query)
+                ).slice(0, 10); 
+
+                if (filteredCities.length > 0) {
+                    filteredCities.forEach(city => {
+                        const suggestionItem = document.createElement('div');
+                        suggestionItem.className = 'p-3 cursor-pointer suggestion-item hover:bg-indigo-100 transition duration-150 border-b border-gray-100';
+                        suggestionItem.innerHTML = `<span class="font-bold">${city.name}</span>, ${city.country}`;
+                        
+                        suggestionItem.addEventListener('click', () => {
+                            input.value = city.name; 
+                            suggestionsContainer.classList.add('hidden');
+                            
+                            if (inputId === 'city-search-1') {
+                                searchCity1 = city.name;
+                            } else {
+                                searchCity2 = city.name;
+                            }
+                            updateDashboard();
+                        });
+                        suggestionsContainer.appendChild(suggestionItem);
+                    });
+                    suggestionsContainer.classList.remove('hidden');
+                } else {
+                    suggestionsContainer.classList.add('hidden');
+                }
+            });
+            
+            // Update selected city on blur/change if no suggestion was explicitly clicked
+            input.addEventListener('change', (e) => {
+                if (inputId === 'city-search-1') {
+                    searchCity1 = e.target.value.trim();
+                } else {
+                    searchCity2 = e.target.value.trim();
+                }
+                suggestionsContainer.classList.add('hidden');
+                updateDashboard();
+            });
+        }
+
+        setupAutocomplete('city-search-1', 'suggestions-1');
+        setupAutocomplete('city-search-2', 'suggestions-2');
+
+        document.getElementById('toggle-list').addEventListener('click', () => {
+            const listContainer = document.getElementById('city-detail-list');
+            const icon = document.getElementById('toggle-icon');
+            
+            // Toggle the max-height to show/hide the content
+            if (listContainer.style.maxHeight === '0px' || listContainer.style.maxHeight === '') {
+                listContainer.style.maxHeight = (listContainer.scrollHeight + 50) + "px"; 
+                icon.textContent = '▲';
+            } else {
+                listContainer.style.maxHeight = '0px';
+                icon.textContent = '▼';
+            }
         });
 
+        /**
+         * Connects to Firestore, checks for existing data, seeds mock data if necessary, 
+         * and sets up a real-time listener.
+         */
+        async function startDataListener() {
+            if (!db || !isAuthReady) return;
+
+            const collectionPath = getPublicCollectionPath('cities_weather');
+            const now = Date.now();
+            
+            // Mock Data Definition (Completed from original file)
+            const mockData = [
+                { id: 'tokyo', name: 'Tokyo', country: 'Japan', timezoneOffset: 9, lat: 35.6895, lon: 139.6917, weather: { temp: 28, sun: 9, condition: 'Sunny' }, lastUpdated: now },
+                { id: 'beijing', name: 'Beijing', country: 'China', timezoneOffset: 8, lat: 39.9042, lon: 116.4074, weather: { temp: 25, sun: 7, condition: 'Partly Cloudy' }, lastUpdated: now },
+                { id: 'mumbai', name: 'Mumbai', country: 'India', timezoneOffset: 5.5, lat: 19.0760, lon: 72.8777, weather: { temp: 30, sun: 10, condition: 'Humid' }, lastUpdated: now },
+                { id: 'newdelhi', name: 'New Delhi', country: 'India', timezoneOffset: 5.5, lat: 28.6139, lon: 77.2090, weather: { temp: 29, sun: 9, condition: 'Haze' }, lastUpdated: now }, 
+                { id: 'manila', name: 'Manila', country: 'Philippines', timezoneOffset: 8, lat: 14.5995, lon: 120.9842, weather: { temp: 32, sun: 5, condition: 'Rainy' }, lastUpdated: now },
+                { id: 'sydney', name: 'Sydney', country: 'Australia', timezoneOffset: 10, lat: -33.8688, lon: 151.2093, weather: { temp: 22, sun: 10, condition: 'Sunny and Warm' }, lastUpdated: now },
+                { id: 'istanbul', name: 'Istanbul', country: 'Turkey', timezoneOffset: 3, lat: 41.0082, lon: 28.9784, weather: { temp: 20, sun: 8, condition: 'Clear Sky' }, lastUpdated: now },
+                { id: 'london', name: 'London', country: 'UK', timezoneOffset: 1, lat: 51.5074, lon: 0.1278, weather: { temp: 15, sun: 3, condition: 'Overcast' }, lastUpdated: now },
+                { id: 'newyork', name: 'New York', country: 'USA', timezoneOffset: -4, lat: 40.7128, lon: -74.0060, weather: { temp: 18, sun: 8, condition: 'Clear' }, lastUpdated: now },
+                { id: 'saopaulo', name: 'São Paulo', country: 'Brazil', timezoneOffset: -3, lat: -23.5505, lon: -46.6333, weather: { temp: 24, sun: 9, condition: 'Sunny' }, lastUpdated: now },
+                { id: 'mexicocity', name: 'Mexico City', country: 'Mexico', timezoneOffset: -6, lat: 19.4326, lon: -99.1332, weather: { temp: 21, sun: 6, condition: 'Cloudy' }, lastUpdated: now },
+            ];
+
+            const setupDocRef = doc(db, collectionPath, 'setup');
+
+            // Check if the setup document exists, and seed mock data if it doesn't
+            const setupDoc = await getDoc(setupDocRef);
+            if (!setupDoc.exists()) {
+                console.log("Seeding initial mock data...");
+                // Store the mock data as an array field within a single document
+                await setDoc(setupDocRef, { cities: mockData, lastSeeded: now });
+            }
+
+            // Setup real-time listener (onSnapshot) on the whole collection
+            const unsub = onSnapshot(collection(db, collectionPath), (snapshot) => {
+                let fetchedCities = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    // Extract the city array from the 'setup' document
+                    if (data.cities && Array.isArray(data.cities)) {
+                        fetchedCities = fetchedCities.concat(data.cities);
+                    }
+                });
+
+                if (fetchedCities.length === 0) {
+                    console.warn("No data found in Firestore. Using mock data for display.");
+                    currentCitiesData = mockData;
+                } else {
+                    currentCitiesData = fetchedCities;
+                }
+                
+                // Set initial default selections if not already set
+                if (!searchCity1) {
+                    searchCity1 = currentCitiesData.find(c => c.id === 'tokyo')?.name || currentCitiesData[0]?.name || '';
+                }
+                if (!searchCity2) {
+                    searchCity2 = currentCitiesData.find(c => c.id === 'london')?.name || currentCitiesData[1]?.name || '';
+                }
+
+                // Update the UI
+                updateDashboard();
+
+            }, (error) => {
+                console.error("Firestore listen failed:", error);
+                document.getElementById('loading-message').textContent = `DB Error: ${error.message}`;
+            });
+            
+            return unsub;
+        } 
     </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%); /* Dark gradient background */
+            color: #f3f4f6;
+        }
+
+        /* --- 3D Globe Styling --- */
+        #map-container-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        #map-container {
+            width: 100%;
+            height: 600px; 
+            position: relative;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); /* Deep shadow for 3D effect */
+            background-color: #0d131f; /* Globe container background */
+        }
+        
+        /* Pin pop-ups now use fixed positioning relative to the map container */
+        .city-card-popup {
+            position: absolute;
+            width: 280px; 
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(10px);
+            z-index: 2000;
+        }
+        .city-card-popup.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        /* --- Card Styling Refinement --- */
+        .card { 
+            background-color: #374151; /* Dark card background */
+            border: 1px solid #4b5563;
+        }
+        .card-content {
+            position: relative;
+            z-index: 10;
+        }
+
+        /* --- Utility Classes for dark mode and better contrast --- */
+        .input-dark {
+            background-color: #1f2937;
+            border-color: #4f46e5;
+            color: #f3f4f6;
+        }
+        .suggestion-item {
+            color: #1f2937;
+        }
+        .suggestion-item:hover {
+            background-color: #e0e7ff;
+        }
+        
+        /* --- Animation Styling --- */
+        @keyframes sun-ray-glow {
+            0%, 100% { text-shadow: 0 0 5px #facc15, 0 0 10px #f97316; }
+            50% { text-shadow: 0 0 15px #facc15, 0 0 20px #f97316; }
+        }
+        .animated-sun {
+            animation: sun-ray-glow 4s ease-in-out infinite;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen p-4 sm:p-8">
+    <header class="mb-8 max-w-7xl mx-auto">
+        <h1 class="text-4xl font-extrabold text-center text-indigo-400">Global Time & Weather Tracker</h1>
+        <p class="text-center text-gray-400 mt-2">A vital tool for world travelers and global businesses. Compare local time, weather, and locations instantly.</p>
+        <p id="user-info" class="text-xs text-center text-gray-500 mt-2">Loading user data...</p>
+    </header>
+
+    <!-- Two Search Inputs for Comparison (Updated for Autocomplete) -->
+    <div class="max-w-4xl mx-auto mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Input 1 -->
+        <div class="relative">
+            <input 
+                type="text" 
+                id="city-search-1" 
+                placeholder="Search City 1 (e.g., New Delhi or India)" 
+                class="w-full p-3 border-2 input-dark rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-500 shadow-xl"
+            >
+            <div id="suggestions-1" class="absolute z-30 w-full bg-white border border-gray-300 rounded-lg shadow-2xl mt-1 max-h-48 overflow-y-auto hidden">
+                <!-- Suggestions go here -->
+            </div>
+        </div>
+        
+        <!-- Input 2 -->
+        <div class="relative">
+            <input 
+                type="text" 
+                id="city-search-2" 
+                placeholder="Search City 2 (e.g., London or UK)" 
+                class="w-full p-3 border-2 input-dark rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-500 shadow-xl"
+            >
+            <div id="suggestions-2" class="absolute z-30 w-full bg-white border border-gray-300 rounded-lg shadow-2xl mt-1 max-h-48 overflow-y-auto hidden">
+                <!-- Suggestions go here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Map and Comparison Pins Area -->
+    <div id="map-container-wrapper">
+        <div id="map-container">
+            <!-- Three.js Canvas will be mounted here -->
+            <div id="pin-popup-container" class="absolute inset-0 pointer-events-none">
+                <!-- Pins and Pop-up Cards will be inserted here by JavaScript relative to the container -->
+            </div>
+        </div>
+        <p class="text-center text-gray-500 text-sm italic mt-4">Drag the 3D globe to rotate and explore the selected cities.</p>
+    </div>
+    
+    <!-- Collapsible List for Detailed View -->
+    <div class="max-w-7xl mx-auto px-4 mt-8">
+        <button 
+            id="toggle-list" 
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg shadow-xl transition duration-200 flex justify-between items-center"
+        >
+            All Available Cities Data <span id="toggle-icon">▼</span>
+        </button>
+        
+        <div id="city-detail-list" class="max-h-0 overflow-hidden mt-4 transition-all duration-500">
+            <p class="col-span-full text-center text-gray-400 p-4" id="loading-message">Loading city data...</p>
+            <div id="city-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-4 bg-gray-800 rounded-b-xl">
+                <!-- City cards will be rendered here -->
+            </div>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
