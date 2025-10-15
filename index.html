@@ -1,8 +1,9 @@
 <!-- 
     CRITICAL IMPROVEMENTS: 
-    1. Title Update: Changed title to focus on Time & Utility for travelers/businesses.
-    2. 3D Globe Visualization: Replaced the 2D map container with an interactive 3D globe using three.js.
-    3. Aesthetic Refinement: Implemented a dark, modern color scheme (Indigo/Gray) and cleaner card styling.
+    1. Feature Addition: Implemented Save/Load Favorite Comparisons using Firestore.
+    2. UI Update: Added a dedicated section for "My Saved Comparisons".
+    3. Firebase Update: Added Firestore 'setDoc' and 'deleteDoc' for saving/removing favorites.
+    4. Globe Interaction: Ensures the selected cities are highlighted immediately.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -57,9 +58,6 @@
             background-color: #374151; /* Dark card background */
             border: 1px solid #4b5563;
         }
-        .card-overlay {
-             /* Removed unnecessary overlay since we don't use background images */
-        }
         .card-content {
             position: relative;
             z-index: 10;
@@ -86,6 +84,24 @@
         .animated-sun {
             animation: sun-ray-glow 4s ease-in-out infinite;
         }
+        
+        /* Custom alert/modal styling */
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5000;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -60%); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
+        }
 
     </style>
 </head>
@@ -99,14 +115,14 @@
     </header>
 
     <!-- Two Search Inputs for Comparison (Updated for Autocomplete) -->
-    <div class="max-w-4xl mx-auto mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="max-w-4xl mx-auto mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <!-- Input 1 -->
         <div class="relative">
             <input 
                 type="text" 
                 id="city-search-1" 
                 placeholder="Search City 1 (e.g., New Delhi or India)" 
-                class="w-full p-3 border-2 input-dark rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-500 shadow-xl"
+                class="w-full p-3 border-2 input-dark rounded-lg focus:outline-none focus:ring-4 focus:ring-red-500 shadow-xl"
             >
             <div id="suggestions-1" class="absolute z-30 w-full bg-white border border-gray-300 rounded-lg shadow-2xl mt-1 max-h-48 overflow-y-auto hidden">
                 <!-- Suggestions go here -->
@@ -126,6 +142,17 @@
             </div>
         </div>
     </div>
+    
+    <!-- Action Button: Save Comparison -->
+    <div class="max-w-4xl mx-auto mb-8 text-center">
+        <button 
+            id="save-comparison"
+            class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg shadow-xl transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+        >
+            Save Comparison to Favorites
+        </button>
+    </div>
 
     <!-- Map and Comparison Pins Area -->
     <div id="map-container-wrapper">
@@ -138,8 +165,17 @@
         <p class="text-center text-gray-500 text-sm italic mt-4">Drag the 3D globe to rotate and explore the selected cities.</p>
     </div>
     
+    <!-- Saved Comparisons List -->
+    <div class="max-w-7xl mx-auto px-4 mt-12">
+        <h2 class="text-3xl font-bold text-gray-300 mb-4 border-b border-gray-700 pb-2">My Saved Comparisons</h2>
+        <div id="saved-comparisons-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <p class="col-span-full text-center text-gray-500 p-4" id="loading-favorites">Loading saved comparisons...</p>
+            <!-- Saved comparison cards will be rendered here -->
+        </div>
+    </div>
+
     <!-- Collapsible List for Detailed View -->
-    <div class="max-w-7xl mx-auto px-4 mt-8">
+    <div class="max-w-7xl mx-auto px-4 mt-12">
         <button 
             id="toggle-list" 
             class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg shadow-xl transition duration-200 flex justify-between items-center"
@@ -156,19 +192,33 @@
     </div>
 </div>
 
+<!-- Modal Container for Custom Alerts -->
+<div id="modal-container"></div>
+
 <!-- Firebase Setup Scripts -->
 <script type="module">
     // --- Firebase SDK Imports ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, onSnapshot, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     
     setLogLevel('debug'); // Enable Firestore logging
 
-    // --- Global Variables (Provided by environment) ---
+    // --- Global Variables (Provided by environment, with fallback for external deployment) ---
+    // Fallback Configuration: This block allows the app to run on GitHub Pages without the development environment.
+    const MOCK_FIREBASE_CONFIG = {
+        apiKey: "MOCK_API_KEY",
+        authDomain: "MOCK_AUTH_DOMAIN",
+        projectId: "MOCK_PROJECT_ID",
+        storageBucket: "MOCK_STORAGE_BUCKET",
+        messagingSenderId: "MOCK_MESSAGING_SENDER_ID",
+        appId: "MOCK_APP_ID"
+    };
+
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    // Use injected config if available, otherwise use mock config
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : MOCK_FIREBASE_CONFIG;
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
     let app;
@@ -177,8 +227,9 @@
     let userId = null;
     let isAuthReady = false;
     let currentCitiesData = []; 
-    let searchCity1 = ''; 
-    let searchCity2 = ''; 
+    let savedComparisons = []; // New array for saved comparisons
+    let searchCity1 = 'Tokyo'; // Default to a city for initial view
+    let searchCity2 = 'New York'; // Default to a city for initial view
     let timeUpdateInterval; 
     
     // --- THREE.js Global Variables ---
@@ -197,6 +248,36 @@
      */
     function getPublicCollectionPath(collectionName) {
         return `artifacts/${appId}/public/data/${collectionName}`;
+    }
+
+    /**
+     * Safely constructs the Firestore private collection path for the user.
+     */
+    function getPrivateCollectionPath(collectionName) {
+        if (!userId) return null;
+        return `artifacts/${appId}/users/${userId}/${collectionName}`;
+    }
+
+    /**
+     * Shows a custom modal message instead of using alert().
+     */
+    function showModal(message, type = 'info') {
+        const container = document.getElementById('modal-container');
+        const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-indigo-500';
+        
+        const modal = document.createElement('div');
+        modal.className = `modal ${bgColor} text-white`;
+        modal.innerHTML = `
+            <p class="font-semibold text-lg">${message}</p>
+        `;
+        
+        container.appendChild(modal);
+
+        setTimeout(() => {
+            modal.style.opacity = '0';
+            modal.style.transform = 'translate(-50%, -60%)';
+            setTimeout(() => modal.remove(), 300);
+        }, 3000);
     }
 
     /**
@@ -259,13 +340,10 @@
         const y = (-tempV.y * 0.5 + 0.5) * rect.height;
 
         // Check if the pin is visible (i.e., on the front side of the globe)
-        const distance = vector.distanceTo(camera.position);
-        const pinVisibilityThreshold = GLOBE_RADIUS * 1.5; // Roughly 1.5 times the radius
-
         return { 
             x: x, 
             y: y, 
-            visible: tempV.z < 1 // check visibility by Z component
+            visible: tempV.z < 1 
         };
     }
     
@@ -295,14 +373,13 @@
         
         // 5. Globe (The Sphere)
         const globeGeometry = new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64);
-        // Simple dark blue material for the globe
         const globeMaterial = new THREE.MeshPhongMaterial({
             color: 0x223355, 
             specular: 0x111111,
             shininess: 30,
             transparent: true,
             opacity: 0.9,
-            wireframe: false // Set to true if you want a wireframe globe
+            wireframe: false 
         });
         globe = new THREE.Mesh(globeGeometry, globeMaterial);
         scene.add(globe);
@@ -334,7 +411,6 @@
         camera.updateProjectionMatrix();
         renderer.setSize(mapContainer.clientWidth, mapContainer.clientHeight);
         
-        // Re-render pins on resize to adjust HTML pop-up positions
         updatePinAndCardPositions();
     }
 
@@ -350,7 +426,6 @@
                 globe.rotation.y += 0.0005;
             }
             
-            // Update the positions of the HTML pop-ups to match the 3D pin locations
             updatePinAndCardPositions();
             
             renderer.render(scene, camera);
@@ -385,7 +460,6 @@
             
             // Vertical rotation (X-axis, clamped to prevent gimbal lock/flipping)
             const newRotationX = globe.rotation.x + deltaY * rotationSpeed;
-            // Clamp X rotation to a reasonable range (e.g., -90 deg to +90 deg)
             globe.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, newRotationX));
 
             previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -393,10 +467,32 @@
 
         // Add listeners
         canvas.addEventListener('mousedown', onMouseDown, false);
-        window.addEventListener('mouseup', onMouseUp, false); // window listener for smooth drag release
+        window.addEventListener('mouseup', onMouseUp, false); 
         window.addEventListener('mousemove', onMouseMove, false);
         
-        // Initial cursor style
+        // Touch events for mobile interaction
+        const onTouchStart = (e) => {
+            if (e.touches.length === 1) {
+                onMouseDown(e.touches[0]);
+            }
+        };
+
+        const onTouchMove = (e) => {
+            if (e.touches.length === 1) {
+                onMouseMove(e.touches[0]);
+                e.preventDefault(); 
+            }
+        };
+
+        const onTouchEnd = () => {
+            onMouseUp();
+        };
+
+        canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchend', onTouchEnd, false);
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+
+
         canvas.style.cursor = 'grab';
     }
 
@@ -404,7 +500,6 @@
      * Renders the 3D pins on the globe for the two selected cities.
      */
     function render3DPins() {
-        // Clear old pins
         while (pinGroup.children.length > 0) {
             pinGroup.remove(pinGroup.children[0]);
         }
@@ -414,7 +509,8 @@
         
         const citiesToPin = [];
         if (city1 && city1.lat && city1.lon) citiesToPin.push(city1);
-        if (city2 && city2.lat && city2.lon && city1?.id !== city2?.id) citiesToPin.push(city2);
+        // Only push city2 if it's different from city1
+        if (city2 && city2.lat && city2.lon && city1?.id !== city2?.id) citiesToPin.push(city2); 
 
         // Pin Geometry (Simple cone pin)
         const pinGeometry = new THREE.ConeGeometry(8, 20, 32);
@@ -446,7 +542,7 @@
     /**
      * Generates the HTML for a single city card. This card is now used as a dynamic pop-up.
      */
-    function generateCityCardHTML(city) {
+    function generateCityCardHTML(city, isSavedComparison = false) {
         if (!city) {
             return `
                 <div class="p-4 rounded-xl bg-gray-700 shadow-inner text-center text-gray-400 min-h-[16rem] flex items-center justify-center">
@@ -480,8 +576,8 @@
         }
 
         return `
-            <div id="popup-content-${city.id}" 
-                class="card p-4 rounded-xl shadow-2xl backdrop-blur-sm bg-gray-700/80 hover:bg-gray-700 transition duration-300"
+            <div id="${isSavedComparison ? 'saved-content-' + city.id : 'popup-content-' + city.id}" 
+                class="card p-4 rounded-xl shadow-2xl backdrop-blur-sm bg-gray-700/80 transition duration-300"
                 data-city-id="${city.id}"
                 data-city-offset="${city.timezoneOffset}"
             >
@@ -494,7 +590,7 @@
                     <div class="mt-4 pt-2 border-t border-gray-600">
                         <div class="flex justify-between items-center text-white mb-2 pb-1 border-b border-gray-600">
                             <span class="font-medium text-lg">Local Time:</span>
-                            <span class="text-2xl font-bold text-indigo-400" id="time-${city.id}">${localTime}</span>
+                            <span class="text-2xl font-bold text-indigo-400" id="${isSavedComparison ? 'saved-time-' + city.id : 'time-' + city.id}">${localTime}</span>
                         </div>
 
                         <div class="flex justify-between items-center text-white">
@@ -545,17 +641,13 @@
             const popupElement = document.getElementById(`popup-${cityId}`);
 
             if (popupElement) {
-                // Get the world position of the pin's tip (or base)
                 const worldPosition = pin.userData.position.clone();
-                // Get the screen position from the world position
                 const { x, y, visible } = worldToScreen(worldPosition);
 
                 if (visible) {
                     popupElement.classList.add('active');
-                    // Positioning the pop-up above and slightly to the right of the pin location
                     popupElement.style.left = `${x}px`;
                     popupElement.style.top = `${y}px`;
-                    // Adjust transform to center the card anchor point on the pin position (x-axis)
                     popupElement.style.transform = `translate(-50%, -100%)`; 
                 } else {
                     popupElement.classList.remove('active');
@@ -587,50 +679,138 @@
         ).join('');
         cityList.innerHTML = cityElements;
     }
-    
+
+    /**
+     * Renders the user's saved comparisons.
+     */
+    function renderSavedComparisons() {
+        const listContainer = document.getElementById('saved-comparisons-list');
+        const loadingMessage = document.getElementById('loading-favorites');
+        
+        if (loadingMessage) {
+            loadingMessage.style.display = 'none';
+        }
+        
+        if (savedComparisons.length === 0) {
+            listContainer.innerHTML = `
+                <p class="col-span-full text-center text-gray-500 p-4">
+                    No comparisons saved yet. Select two cities above and click "Save Comparison to Favorites".
+                </p>
+            `;
+            return;
+        }
+
+        const comparisonHTML = savedComparisons.map(comparison => {
+            const city1 = findCity(comparison.city1Name);
+            const city2 = findCity(comparison.city2Name);
+
+            if (!city1 || !city2) return ''; // Skip if city data is missing
+
+            return `
+                <div class="p-4 bg-gray-800 rounded-xl shadow-xl border border-gray-700 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold text-indigo-400 mb-2">
+                            ${city1.name} <span class="text-gray-500 font-normal">vs.</span> ${city2.name}
+                        </h3>
+                        <div class="text-sm text-gray-400 mb-4">
+                            Saved on: ${new Date(comparison.timestamp).toLocaleDateString()}
+                        </div>
+                        <div class="flex justify-around space-x-2">
+                            <div class="w-1/2">${generateCityCardHTML(city1, true)}</div>
+                            <div class="w-1/2">${generateCityCardHTML(city2, true)}</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-4 space-x-2">
+                        <button 
+                            data-city1="${city1.name}" 
+                            data-city2="${city2.name}" 
+                            class="load-comparison w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition duration-200"
+                        >
+                            Load to Globe
+                        </button>
+                        <button 
+                            data-doc-id="${comparison.id}" 
+                            class="delete-comparison w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition duration-200"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        listContainer.innerHTML = comparisonHTML;
+
+        // Add event listeners for Load and Delete buttons
+        document.querySelectorAll('.load-comparison').forEach(button => {
+            button.addEventListener('click', (e) => {
+                searchCity1 = e.target.getAttribute('data-city1');
+                searchCity2 = e.target.getAttribute('data-city2');
+                updateDashboard();
+                showModal('Comparison loaded!', 'success');
+            });
+        });
+
+        document.querySelectorAll('.delete-comparison').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const docId = e.target.getAttribute('data-doc-id');
+                await deleteComparison(docId);
+            });
+        });
+    }
+
     // --- Data Management and Auth Setup (Kept from previous version) ---
 
+    // Only proceed if the config is available (even if mocked)
     if (firebaseConfig) {
+        if (firebaseConfig === MOCK_FIREBASE_CONFIG && typeof __firebase_config === 'undefined') {
+            document.getElementById('user-info').textContent = 'User ID: MOCK (Using Mock Data for external deployment)';
+        } else {
+             document.getElementById('user-info').textContent = 'Loading user data...';
+        }
+
         app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
         
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                document.getElementById('user-info').textContent = `User ID: ${user.uid} (Authenticated)`;
+                // If real auth, show UID, otherwise it's just mock/anonymous
+                if(firebaseConfig !== MOCK_FIREBASE_CONFIG) {
+                    document.getElementById('user-info').textContent = `User ID: ${user.uid} (Authenticated)`;
+                }
             } else if (userId) {
-                document.getElementById('user-info').textContent = `User ID: ${userId} (Fallback)`;
+                document.getElementById('user-info').textContent = `Auth Fallback ID: ${userId}`;
             }
         });
         
         (async () => {
             try {
-                if (initialAuthToken) {
+                if (initialAuthToken && firebaseConfig !== MOCK_FIREBASE_CONFIG) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
                 
                 const user = auth.currentUser;
-                userId = user?.uid || crypto.randomUUID();
+                userId = user?.uid || crypto.randomUUID(); 
                 isAuthReady = true;
 
-                document.getElementById('user-info').textContent = `User ID: ${userId} (Authenticated)`;
-
-                // Initialize 3D scene after the container is ready
                 initThreeJS();
                 
-                retryWithBackoff(startDataListener)
+                retryWithBackoff(startDataListeners)
                     .catch(error => {
                         console.error("Critical error starting data listener after retries:", error);
-                        document.getElementById('loading-message').textContent = `CRITICAL ERROR: Failed to connect to database.`;
+                        document.getElementById('loading-message').textContent = `CRITICAL ERROR: Failed to load city data.`;
+                        startMockDataLoad(); // Fallback to in-memory mock if Firestore fails entirely
                     });
 
             } catch (error) {
                 console.error("Firebase Auth Error:", error);
                 userId = crypto.randomUUID(); 
                 isAuthReady = true;
-                document.getElementById('user-info').textContent = `Auth Error. Fallback ID: ${userId}`;
+                initThreeJS();
+                startMockDataLoad(); // Fallback to in-memory mock if auth fails
             }
         })();
 
@@ -642,16 +822,38 @@
     function findCity(term) {
         if (!term) return undefined;
         const normalizedTerm = term.toLowerCase().trim();
-        const exactMatch = currentCitiesData.find(city => city.name.toLowerCase() === normalizedTerm);
-        if (exactMatch) return exactMatch;
-        return currentCitiesData.find(city => city.name.toLowerCase().startsWith(normalizedTerm));
+        // Try finding by exact name match first
+        let city = currentCitiesData.find(c => c.name.toLowerCase() === normalizedTerm);
+        if (city) return city;
+
+        // Then try finding by partial match on name or country
+        return currentCitiesData.find(c => 
+             c.name.toLowerCase().startsWith(normalizedTerm) ||
+             c.country.toLowerCase().startsWith(normalizedTerm)
+        );
     }
 
     function updateDashboard() {
-        render3DPins(); // Renders 3D pins
-        renderHtmlPopups(); // Renders HTML popups
-        renderAllCities(); // Renders the detail list cards
-        startClock(); // Start or restart the clock after rendering.
+        const city1 = findCity(searchCity1);
+        const city2 = findCity(searchCity2);
+
+        // Update search inputs with confirmed city name
+        document.getElementById('city-search-1').value = city1 ? city1.name : searchCity1;
+        document.getElementById('city-search-2').value = city2 ? city2.name : searchCity2;
+        
+        // Enable/Disable save button
+        const saveButton = document.getElementById('save-comparison');
+        if (city1 && city2 && city1.id !== city2.id) {
+            saveButton.disabled = false;
+        } else {
+            saveButton.disabled = true;
+        }
+
+        render3DPins(); 
+        renderHtmlPopups();
+        renderAllCities(); 
+        renderSavedComparisons(); // Rerender favorites list
+        startClock(); 
     }
     
     function startClock() {
@@ -660,10 +862,22 @@
         }
 
         const updateClocks = () => {
-            const timeElements = document.querySelectorAll('[id^="time-"]');
-            timeElements.forEach(timeElement => {
+            // Update pop-up clocks
+            document.querySelectorAll('[id^="time-"]').forEach(timeElement => {
                 const cityId = timeElement.id.split('-')[1];
                 const cityCard = document.querySelector(`[data-city-id="${cityId}"]`);
+
+                if (cityCard) {
+                    const offset = parseFloat(cityCard.getAttribute('data-city-offset'));
+                    if (!isNaN(offset)) {
+                        timeElement.textContent = getCityLocalTime(offset);
+                    }
+                }
+            });
+            // Update saved comparison clocks
+            document.querySelectorAll('[id^="saved-time-"]').forEach(timeElement => {
+                const cityId = timeElement.id.split('-')[1];
+                const cityCard = document.querySelector(`[id^="saved-content-"][data-city-id="${cityId}"]`);
 
                 if (cityCard) {
                     const offset = parseFloat(cityCard.getAttribute('data-city-offset'));
@@ -675,7 +889,7 @@
         };
         
         updateClocks();
-        timeUpdateInterval = setInterval(updateClocks, 60000); 
+        timeUpdateInterval = setInterval(updateClocks, 60000); // Update every minute
     }
     
     function setupAutocomplete(inputId, suggestionsId) {
@@ -694,12 +908,12 @@
             
             if (query.length < 2) {
                 suggestionsContainer.classList.add('hidden');
-                if (inputId === 'city-search-1') {
-                    searchCity1 = '';
-                } else {
-                    searchCity2 = '';
+                
+                if (query.length === 0) {
+                    if (inputId === 'city-search-1') { searchCity1 = ''; } 
+                    else { searchCity2 = ''; }
+                    updateDashboard();
                 }
-                updateDashboard();
                 return;
             }
 
@@ -718,11 +932,8 @@
                         input.value = city.name; 
                         suggestionsContainer.classList.add('hidden');
                         
-                        if (inputId === 'city-search-1') {
-                            searchCity1 = city.name;
-                        } else {
-                            searchCity2 = city.name;
-                        }
+                        if (inputId === 'city-search-1') { searchCity1 = city.name; } 
+                        else { searchCity2 = city.name; }
                         updateDashboard();
                     });
                     suggestionsContainer.appendChild(suggestionItem);
@@ -734,11 +945,9 @@
         });
         
         input.addEventListener('change', (e) => {
-             if (inputId === 'city-search-1') {
-                 searchCity1 = e.target.value.trim();
-             } else {
-                 searchCity2 = e.target.value.trim();
-             }
+             const selectedCityName = e.target.value.trim();
+             if (inputId === 'city-search-1') { searchCity1 = selectedCityName; } 
+             else { searchCity2 = selectedCityName; }
              suggestionsContainer.classList.add('hidden');
              updateDashboard();
         });
@@ -752,6 +961,7 @@
         const icon = document.getElementById('toggle-icon');
         
         if (listContainer.style.maxHeight === '0px' || listContainer.style.maxHeight === '') {
+            // Set max height high enough to contain all content, plus some buffer
             listContainer.style.maxHeight = (listContainer.scrollHeight + 50) + "px"; 
             icon.textContent = '▲';
         } else {
@@ -760,13 +970,12 @@
         }
     });
 
+    document.getElementById('save-comparison').addEventListener('click', saveComparison);
 
-    async function startDataListener() {
-        if (!db || !isAuthReady) return;
-
-        const collectionPath = getPublicCollectionPath('cities_weather');
+    // --- Mock Data Initialization ---
+    function getMockData() {
         const now = Date.now();
-        const mockData = [
+        return [
             { id: 'tokyo', name: 'Tokyo', country: 'Japan', timezoneOffset: 9, lat: 35.6895, lon: 139.6917, weather: { temp: 28, sun: 9, condition: 'Sunny' }, lastUpdated: now },
             { id: 'beijing', name: 'Beijing', country: 'China', timezoneOffset: 8, lat: 39.9042, lon: 116.4074, weather: { temp: 25, sun: 7, condition: 'Partly Cloudy' }, lastUpdated: now },
             { id: 'mumbai', name: 'Mumbai', country: 'India', timezoneOffset: 5.5, lat: 19.0760, lon: 72.8777, weather: { temp: 30, sun: 10, condition: 'Humid' }, lastUpdated: now },
@@ -795,30 +1004,127 @@
             { id: 'lagos', name: 'Lagos', country: 'Nigeria', timezoneOffset: 1, lat: 6.5244, lon: 3.3792, weather: { temp: 31, sun: 7, condition: 'Humid' }, lastUpdated: now },
             { id: 'capetown', name: 'Cape Town', country: 'South Africa', timezoneOffset: 2, lat: -33.9249, lon: 18.4241, weather: { temp: 16, sun: 9, condition: 'Clear' }, lastUpdated: now },
         ];
-        
-        try {
-            const tokyoDocRef = doc(db, collectionPath, 'tokyo');
-            const docSnap = await getDoc(tokyoDocRef); 
+    }
+    
+    function startMockDataLoad() {
+        currentCitiesData = getMockData();
+        updateDashboard();
+        document.getElementById('loading-message').textContent = `Using internal mock data.`;
+    }
 
-            if (!docSnap.exists()) {
-                await Promise.all(mockData.map(city => 
-                    setDoc(doc(db, collectionPath, city.id), city)
-                ));
+    // --- Data Listeners (Firestore) ---
+    async function startDataListeners() {
+        if (!db || !isAuthReady) {
+            startMockDataLoad();
+            return;
+        }
+        
+        // 1. Listen for Public City Data (Mock Seeding)
+        const cityCollectionPath = getPublicCollectionPath('cities_weather');
+        
+        // Only seed data if we are using the mock config OR the Canvas config
+        if (firebaseConfig === MOCK_FIREBASE_CONFIG || typeof __firebase_config !== 'undefined') {
+            try {
+                const tokyoDocRef = doc(db, cityCollectionPath, 'tokyo');
+                const docSnap = await getDoc(tokyoDocRef); 
+
+                if (!docSnap.exists()) {
+                    await Promise.all(getMockData().map(city => 
+                        setDoc(doc(db, cityCollectionPath, city.id), city)
+                    ));
+                    console.log("Mock city data seeded to Firestore.");
+                }
+            } catch (e) {
+                console.error("Error during Firestore city data seeding, falling back to in-memory mock:", e);
+                startMockDataLoad();
+                // Continue to setup snapshot listeners, they will fail silently if connection is bad
             }
-        } catch (e) {
-            console.error("Error during Firestore data seeding:", e);
         }
 
-        onSnapshot(collection(db, collectionPath), (snapshot) => {
+        // Setup the real-time listener for public city data
+        onSnapshot(collection(db, cityCollectionPath), (snapshot) => {
             currentCitiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             updateDashboard(); 
         }, (error) => {
-            console.error("Firestore Snapshot Error:", error);
-            document.getElementById('loading-message').textContent = `Error loading data (check permissions): ${error.message}`;
+            console.error("Firestore City Snapshot Error, falling back to in-memory mock:", error);
+            document.getElementById('loading-message').textContent = `Error loading data (check permissions). Falling back to mock data.`;
+            startMockDataLoad();
         });
+
+
+        // 2. Listen for Private User Favorites (Only if a userId exists)
+        if (userId) {
+            const favoritesCollectionPath = getPrivateCollectionPath('favorites');
+            if (favoritesCollectionPath) {
+                // Ordering by timestamp ensures the newest saved comparison appears first
+                const favoritesQuery = collection(db, favoritesCollectionPath); // Cannot use orderBy due to complexity rule.
+                
+                onSnapshot(favoritesQuery, (snapshot) => {
+                    savedComparisons = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Sort locally since Firestore orderBy is restricted
+                    savedComparisons.sort((a, b) => b.timestamp - a.timestamp); 
+                    renderSavedComparisons(); 
+                }, (error) => {
+                    console.error("Firestore Favorites Snapshot Error:", error);
+                    document.getElementById('loading-favorites').textContent = `Error loading your favorites.`;
+                });
+            }
+        }
+    }
+    
+    // --- Favorites Logic ---
+    async function saveComparison() {
+        const city1 = findCity(searchCity1);
+        const city2 = findCity(searchCity2);
+
+        if (!city1 || !city2 || city1.id === city2.id) {
+            showModal('Please select two distinct cities to save.', 'error');
+            return;
+        }
+
+        const favoritesCollectionPath = getPrivateCollectionPath('favorites');
+        if (!favoritesCollectionPath) {
+            showModal('Authentication error. Cannot save favorites.', 'error');
+            return;
+        }
+
+        const comparisonData = {
+            city1Name: city1.name,
+            city2Name: city2.name,
+            timestamp: Date.now() 
+        };
+
+        try {
+            // Generate a unique ID based on city names for easy lookup/overwrite (optional: use UUID instead)
+            const docId = `${city1.id}_vs_${city2.id}`; 
+            const docRef = doc(db, favoritesCollectionPath, docId);
+            
+            await setDoc(docRef, comparisonData, { merge: true });
+
+            showModal(`Comparison (${city1.name} vs. ${city2.name}) saved!`, 'success');
+        } catch (e) {
+            console.error("Error saving comparison:", e);
+            showModal('Failed to save comparison to Firestore.', 'error');
+        }
+    }
+
+    async function deleteComparison(docId) {
+        const favoritesCollectionPath = getPrivateCollectionPath('favorites');
+        if (!favoritesCollectionPath) {
+            showModal('Authentication error. Cannot delete favorite.', 'error');
+            return;
+        }
+
+        try {
+            const docRef = doc(db, favoritesCollectionPath, docId);
+            await deleteDoc(docRef);
+            showModal('Favorite comparison deleted.', 'success');
+        } catch (e) {
+            console.error("Error deleting comparison:", e);
+            showModal('Failed to delete comparison from Firestore.', 'error');
+        }
     }
 
 </script>
 </body>
-
 </html>
