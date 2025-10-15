@@ -157,6 +157,11 @@
                 // Find the first and last curly braces to isolate the JSON block
                 const jsonStart = text.indexOf('{');
                 const jsonEnd = text.lastIndexOf('}') + 1;
+                // Check if braces were found and are in the correct order
+                if (jsonStart === -1 || jsonEnd === 0 || jsonEnd <= jsonStart) {
+                     console.error("JSON extraction failed: Braces not found or misplaced.");
+                     return null;
+                }
                 const jsonString = text.substring(jsonStart, jsonEnd);
                 return JSON.parse(jsonString);
             } catch (e) {
@@ -222,6 +227,9 @@
                 try {
                     const response = await fetch(url, options);
                     if (!response.ok) {
+                        // Throw an error with status text for better debugging
+                        const errorBody = await response.text();
+                        console.error(`Attempt ${i + 1} failed with status: ${response.status}`, errorBody);
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response;
@@ -231,6 +239,7 @@
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
+            throw new Error("Fetch failed after all retries.");
         }
 
         async function fetchCityData(slot) {
@@ -239,24 +248,26 @@
 
             setLoading(slot, true);
 
-            const userQuery = `Find the current local time, the current temperature in Celsius, the current weather condition, and the full country name for the city: ${cityName}. Please provide the answer as a single, valid JSON object following this schema.`;
+            // Refined query to be very specific
+            const userQuery = `Current local time, temperature in Celsius, weather condition, and full country name for the city: ${cityName}.`;
             
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
                 tools: [{ "google_search": {} }],
                 systemInstruction: {
-                    parts: [{ text: "You are a specialized data retrieval agent. Only respond with a single JSON object. Do not include any text outside the JSON object. You must use Google Search to get the current real-time data. If data is not found, use placeholder values." }]
+                    // Added instruction to always use the requested city name and to handle missing data gracefully
+                    parts: [{ text: "You are a specialized data retrieval agent for real-time weather and time. You MUST ONLY respond with a single JSON object. Do not include any explanatory text, markdown formatting other than the JSON object, or commentary. Use Google Search to get the CURRENT, real-time data. For 'city', use the primary city name found. If a data field is unavailable, use 'N/A'." }]
                 },
                 generationConfig: {
                     responseMimeType: "application/json",
                     responseSchema: {
                         type: "OBJECT",
                         properties: {
-                            "city": { "type": "STRING", "description": "The name of the city." },
-                            "country": { "type": "STRING", "description": "The full country name." },
+                            "city": { "type": "STRING", "description": "The name of the city requested (e.g., London)." },
+                            "country": { "type": "STRING", "description": "The full country name (e.g., United Kingdom)." },
                             "localTime": { "type": "STRING", "description": "The current local time (e.g., 2:30 PM)." },
-                            "temperature": { "type": "STRING", "description": "The current temperature with unit (e.g., 19°C)." },
-                            "condition": { "type": "STRING", "description": "A brief description of the current weather (e.g., Partly Cloudy)." }
+                            "temperature": { "type": "STRING", "description": "The current temperature with unit (e.g., 19°C or N/A)." },
+                            "condition": { "type": "STRING", "description": "A brief description of the current weather (e.g., Partly Cloudy or N/A)." }
                         },
                         "propertyOrdering": ["city", "country", "localTime", "temperature", "condition"]
                     }
@@ -276,14 +287,27 @@
                 if (candidate && candidate.content?.parts?.[0]?.text) {
                     const jsonText = candidate.content.parts[0].text;
                     const data = extractJson(jsonText);
-                    updateUI(slot, data);
+                    if (data) {
+                        updateUI(slot, data);
+                    } else {
+                        // JSON extraction failed
+                        updateUI(slot, { error: "JSON parse failed" });
+                        console.error("Model returned text but JSON parsing failed:", jsonText);
+                    }
                 } else {
-                    updateUI(slot, { error: "No response" });
+                    // No candidate or no text part in the response
+                    updateUI(slot, { error: "No model response text" });
+                    console.error("Model response lacked text candidate:", result);
                 }
 
             } catch (error) {
-                console.error(`Error fetching data for city ${slot}:`, error);
-                updateUI(slot, { error: "Fetch error" });
+                console.error(`Final Error fetching data for city ${slot}:`, error);
+                // Check if the error is due to an invalid JSON response from the API (not an HTTP error)
+                if (error.message.includes("JSON parse failed")) {
+                    updateUI(slot, { error: "JSON parse error after fetch" });
+                } else {
+                    updateUI(slot, { error: "Network or API connection error" });
+                }
             }
         }
         
