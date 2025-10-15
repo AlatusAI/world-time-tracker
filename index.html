@@ -255,8 +255,8 @@
                 contents: [{ parts: [{ text: userQuery }] }],
                 tools: [{ "google_search": {} }],
                 systemInstruction: {
-                    // Added instruction to always use the requested city name and to handle missing data gracefully
-                    parts: [{ text: "You are a specialized data retrieval agent for real-time weather and time. You MUST ONLY respond with a single JSON object. Do not include any explanatory text, markdown formatting other than the JSON object, or commentary. Use Google Search to get the CURRENT, real-time data. For 'city', use the primary city name found. If a data field is unavailable, use 'N/A'." }]
+                    // UPDATED: Added specific command for JSON output only
+                    parts: [{ text: "You are a specialized data retrieval agent for real-time weather and time. You MUST ONLY respond with a single JSON object that conforms exactly to the provided JSON schema. Do not include any introductory text, explanatory text, markdown formatting (like ```json), or commentary outside of the JSON block itself. Use Google Search to get the CURRENT, real-time data. For 'city', use the primary city name found. If a data field is unavailable, use 'N/A'." }]
                 },
                 generationConfig: {
                     responseMimeType: "application/json",
@@ -274,6 +274,8 @@
                 }
             };
             
+            let jsonText = null;
+
             try {
                 const response = await fetchWithRetry(apiUrl, {
                     method: 'POST',
@@ -285,14 +287,15 @@
                 const candidate = result.candidates?.[0];
 
                 if (candidate && candidate.content?.parts?.[0]?.text) {
-                    const jsonText = candidate.content.parts[0].text;
+                    jsonText = candidate.content.parts[0].text;
                     const data = extractJson(jsonText);
                     if (data) {
                         updateUI(slot, data);
                     } else {
                         // JSON extraction failed
                         updateUI(slot, { error: "JSON parse failed" });
-                        console.error("Model returned text but JSON parsing failed:", jsonText);
+                        // Log the raw text for debugging what caused the failure
+                        console.error("DEBUG: Model returned text but JSON parsing failed. Raw Text:", jsonText); 
                     }
                 } else {
                     // No candidate or no text part in the response
@@ -302,7 +305,12 @@
 
             } catch (error) {
                 console.error(`Final Error fetching data for city ${slot}:`, error);
-                // Check if the error is due to an invalid JSON response from the API (not an HTTP error)
+                
+                // If we have the raw text from the model, log it one last time during the final catch block
+                if (jsonText) {
+                     console.error("DEBUG: Raw model text leading to exception was:", jsonText);
+                }
+
                 if (error.message.includes("JSON parse failed")) {
                     updateUI(slot, { error: "JSON parse error after fetch" });
                 } else {
