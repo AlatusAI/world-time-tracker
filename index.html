@@ -3,214 +3,177 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Custom SVG Global Data Map</title>
+    <title>AI-Powered Google Search Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom styles for aesthetic appeal */
-        .card {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
         }
-        .card:hover {
-            transform: translateY(-2px);
+        .search-card {
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
         }
-        .tooltip {
-            position: absolute;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.1s;
-            z-index: 50; /* High z-index to ensure visibility */
+        .loader {
+            border-top-color: #3b82f6;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
         }
-        .country-path {
-            fill: #E5E7EB; /* Default fill color */
-            stroke: #ffffff; /* White border for definition */
-            stroke-width: 0.5;
-            transition: fill 0.2s, stroke 0.2s;
-            cursor: pointer;
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
         }
-        .country-path:hover {
-            stroke: #1F2937; /* Dark gray border on hover */
-            stroke-width: 1px;
-            filter: brightness(1.1);
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-start justify-center p-4 sm:p-8 font-sans">
+<body class="min-h-screen flex items-center justify-center p-4">
 
-    <div id="app" class="w-full max-w-7xl">
+    <div id="app" class="w-full max-w-3xl">
         <header class="text-center mb-10">
-            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Global Impact Score Map</h1>
-            <p class="text-lg text-gray-500 mt-2">Visualization of hypothetical country performance data.</p>
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Ask Gemini to Search</h1>
+            <p class="text-lg text-gray-500 mt-2">Get up-to-date, summarized information from Google Search.</p>
         </header>
 
-        <div class="flex flex-col lg:flex-row space-y-8 lg:space-y-0 lg:space-x-8">
-
-            <!-- Map Container -->
-            <div class="lg:w-3/4 w-full card bg-white p-6 rounded-xl overflow-hidden">
-                <div id="map-container" class="w-full h-96 sm:h-[600px] flex items-center justify-center">
-                    <!-- viewBox adjusted to accommodate a simple, general world map outline -->
-                    <svg id="world-map-svg" viewBox="0 0 1000 600" class="w-full h-full max-h-full">
-                        <!-- Map paths will be inserted here by JavaScript -->
-                    </svg>
-                </div>
+        <div class="search-card bg-white p-6 sm:p-8 rounded-xl">
+            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
+                <input type="text" id="searchInput" placeholder="e.g., What are the latest developments in AI?"
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-gray-700"
+                       onkeydown="if(event.key === 'Enter') performSearch()">
+                <button onclick="performSearch()" id="searchButton"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300 flex items-center justify-center disabled:opacity-50">
+                    <span id="buttonText">Search</span>
+                    <div id="loadingIndicator" class="hidden w-5 h-5 border-2 border-white rounded-full loader ml-2"></div>
+                </button>
             </div>
 
-            <!-- Sidebar/Legend/Details -->
-            <div class="lg:w-1/4 w-full space-y-6">
+            <div id="responseContainer" class="mt-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-3">Response</h2>
+                <div id="responseText" class="bg-gray-50 p-4 rounded-lg text-gray-700 leading-relaxed min-h-[100px] flex items-center justify-center text-center">
+                    <p>Enter a query above to begin your search.</p>
+                </div>
                 
-                <div class="card bg-white p-6 rounded-xl">
-                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Color Legend</h2>
-                    <ul class="space-y-2 text-sm">
-                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#10B981]"></span> Very High (76-100)</li>
-                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#34D399]"></span> High (61-75)</li>
-                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#FBBF24]"></span> Medium (41-60)</li>
-                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-[#F87171]"></span> Low (0-40)</li>
-                        <li class="flex items-center"><span class="w-4 h-4 rounded-full mr-3 bg-gray-200"></span> No Data</li>
+                <div id="sourceContainer" class="mt-4 hidden">
+                    <h3 class="text-sm font-semibold text-gray-600 mb-2">Sources:</h3>
+                    <ul id="sourceList" class="space-y-1 text-sm text-blue-600">
+                        <!-- Search sources will be listed here -->
                     </ul>
                 </div>
-                
-                <div id="detail-card" class="card bg-white p-6 rounded-xl min-h-40">
-                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Country Details</h2>
-                    <p id="country-name" class="text-2xl font-bold text-gray-900">Hover over a country</p>
-                    <p id="country-score" class="text-md text-gray-500 mt-1">Score: N/A</p>
-                    <p id="country-category" class="text-md font-medium mt-2">Category: N/A</p>
-                </div>
+            </div>
+            
+            <div id="errorContainer" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden">
+                An error occurred during the search. Please try again.
             </div>
         </div>
     </div>
-    
-    <!-- Tooltip Element -->
-    <div id="tooltip" class="tooltip bg-gray-800 text-white text-xs px-2 py-1 rounded-lg shadow-xl"></div>
 
     <script>
-        // --- DATA SETUP ---
-        // Mock data structure: ISO3 codes are used to match the map data
-        const mockCountryData = [
-            { iso3: "CAN", name: "Canada", score: 85, category: "Very High", color: "#10B981" },
-            { iso3: "USA", name: "United States", score: 62, category: "High", color: "#34D399" },
-            { iso3: "MEX", name: "Mexico", score: 45, category: "Medium", color: "#FBBF24" },
-            { iso3: "BRA", name: "Brazil", score: 30, category: "Low", color: "#F87171" },
-            { iso3: "GBR", name: "United Kingdom", score: 78, category: "Very High", color: "#10B981" },
-            { iso3: "DEU", name: "Germany", score: 72, category: "High", color: "#34D399" },
-            { iso3: "FRA", name: "France", score: 68, category: "High", color: "#34D399" },
-            { iso3: "JPN", name: "Japan", score: 90, category: "Very High", color: "#10B981" },
-            { iso3: "CHN", name: "China", score: 55, category: "Medium", color: "#FBBF24" },
-            { iso3: "IND", name: "India", score: 25, category: "Low", color: "#F87171" },
-            { iso3: "AUS", name: "Australia", score: 88, category: "Very High", color: "#10B981" },
-            { iso3: "RUS", name: "Russia", score: 50, category: "Medium", color: "#FBBF24" },
-            { iso3: "ITA", name: "Italy", score: 70, category: "High", color: "#34D399" },
-            { iso3: "ESP", name: "Spain", score: 75, category: "High", color: "#34D399" },
-            { iso3: "PRT", name: "Portugal", score: 81, category: "Very High", color: "#10B981" },
-            { iso3: "NGA", name: "Nigeria", score: 35, category: "Low", color: "#F87171" },
-            { iso3: "ZAF", name: "South Africa", score: 58, category: "Medium", color: "#FBBF24" },
-        ];
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const responseTextEl = document.getElementById('responseText');
+        const sourceContainer = document.getElementById('sourceContainer');
+        const sourceList = document.getElementById('sourceList');
+        const errorContainer = document.getElementById('errorContainer');
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
-        // Map data into an accessible structure
-        const countryMap = new Map(mockCountryData.map(d => [d.iso3, d]));
-
-        // Function to determine the fill color based on category
-        const getFillColor = (data) => {
-            if (!data) return '#E5E7EB'; // Default gray for no data
-            
-            switch (data.category) {
-                case 'Very High': return "#10B981";
-                case 'High': return "#34D399";
-                case 'Medium': return "#FBBF24";
-                case 'Low': return "#F87171";
-                default: return '#E5E7EB';
-            }
-        };
-
-        // --- Custom Map SVG Path Data ---
-        // A minimal set of complex country paths (d attribute) for demonstration, using the ISO3 as the ID.
-        // NOTE: The original massive string has been removed and replaced with representative paths for the countries in the mock data.
-        const svgPathData = [
-            // North America
-            { id: "CAN", d: "M150 100 L250 100 L270 150 L180 140 Z" },
-            { id: "USA", d: "M180 140 L270 150 L300 200 L200 180 Z" },
-            { id: "MEX", d: "M200 180 L300 200 L320 250 L220 220 Z" },
-            // South America
-            { id: "BRA", d: "M350 350 L400 300 L450 400 L380 450 Z" },
-            // Europe
-            { id: "GBR", d: "M550 150 L560 170 L540 180 L530 160 Z" },
-            { id: "FRA", d: "M560 180 L600 180 L600 220 L560 220 Z" },
-            { id: "DEU", d: "M600 180 L640 180 L640 210 L600 210 Z" },
-            { id: "ITA", d: "M610 210 L620 250 L640 240 L630 200 Z" },
-            { id: "ESP", d: "M550 220 L600 220 L600 260 L550 260 Z" },
-            { id: "PRT", d: "M530 230 L550 230 L550 250 L530 250 Z" },
-            { id: "RUS", d: "M650 100 L850 100 L900 300 L700 350 L650 200 Z" },
-            // Asia
-            { id: "CHN", d: "M750 350 L850 350 L880 400 L780 450 Z" },
-            { id: "IND", d: "M700 450 L750 480 L730 520 L680 500 Z" },
-            { id: "JPN", d: "M900 200 L920 220 L910 240 L890 220 Z" },
-            // Africa
-            { id: "NGA", d: "M450 350 L500 350 L510 400 L460 400 Z" },
-            { id: "ZAF", d: "M480 480 L520 480 L520 520 L480 520 Z" },
-            // Oceania
-            { id: "AUS", d: "M800 500 L850 500 L870 550 L820 550 Z" }
-        ];
-
-        const svgMap = document.getElementById('world-map-svg');
-        const tooltip = document.getElementById('tooltip');
-        const countryNameEl = document.getElementById('country-name');
-        const countryScoreEl = document.getElementById('country-score');
-        const countryCategoryEl = document.getElementById('country-category');
-
-        // Function to update the detail card
-        function updateDetails(data) {
-            if (data) {
-                countryNameEl.textContent = data.name;
-                countryScoreEl.textContent = `Score: ${data.score}`;
-                countryCategoryEl.textContent = `Category: ${data.category}`;
-                // Optional: set text color based on category
-                countryCategoryEl.className = `text-md font-medium mt-2 text-[${getFillColor(data)}]`;
-            } else {
-                countryNameEl.textContent = 'Hover over a country';
-                countryScoreEl.textContent = 'Score: N/A';
-                countryCategoryEl.textContent = 'Category: N/A';
-                countryCategoryEl.className = 'text-md font-medium mt-2';
+        function setUIState(isLoading) {
+            searchButton.disabled = isLoading;
+            buttonText.textContent = isLoading ? 'Searching...' : 'Search';
+            loadingIndicator.classList.toggle('hidden', !isLoading);
+            errorContainer.classList.add('hidden');
+            if (isLoading) {
+                responseTextEl.innerHTML = '<div class="text-gray-500">Processing query...</div>';
+                sourceContainer.classList.add('hidden');
+                sourceList.innerHTML = '';
             }
         }
-        
-        // Initialize details to empty state
-        updateDetails(null);
 
-        // --- MAP RENDERING ---
-        svgPathData.forEach(country => {
-            const countryData = countryMap.get(country.id);
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            
-            path.setAttribute('d', country.d);
-            path.setAttribute('data-iso3', country.id);
-            path.classList.add('country-path');
-            path.style.fill = getFillColor(countryData);
-            
-            // Mouse Events
-            path.addEventListener('mouseover', (e) => {
-                const data = countryMap.get(e.target.getAttribute('data-iso3'));
+        async function fetchWithRetry(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === retries - 1) throw error; // Re-throw on final failure
+                    const delay = Math.pow(2, i) * 1000; // Exponential backoff (1s, 2s, 4s)
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        async function performSearch() {
+            const userQuery = searchInput.value.trim();
+            if (!userQuery) {
+                responseTextEl.innerHTML = '<p class="text-red-500">Please enter a search query.</p>';
+                return;
+            }
+
+            setUIState(true);
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                tools: [{ "google_search": {} }], // Enable Google Search grounding
+                systemInstruction: {
+                    parts: [{ text: "You are an expert search assistant. Answer the user's question concisely based on the search results provided by Google Search. Provide a summary first, followed by the generated text." }]
+                },
+            };
+
+            try {
+                const response = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
                 
-                // Update detail card
-                updateDetails(data);
-                
-                // Show tooltip
-                tooltip.textContent = data ? `${data.name} (${data.score})` : `${country.id} (No Data)`;
-                tooltip.style.opacity = 1;
-            });
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
 
-            path.addEventListener('mousemove', (e) => {
-                // Position tooltip near the cursor
-                tooltip.style.left = `${e.clientX + 10}px`;
-                tooltip.style.top = `${e.clientY + 10}px`;
-            });
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const text = candidate.content.parts[0].text;
+                    responseTextEl.innerHTML = `<p>${text.replace(/\\n/g, '<br>')}</p>`;
 
-            path.addEventListener('mouseout', () => {
-                // Hide tooltip and reset details
-                tooltip.style.opacity = 0;
-                updateDetails(null);
-            });
+                    // Extract grounding sources
+                    let sources = [];
+                    const groundingMetadata = candidate.groundingMetadata;
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title);
+                    }
 
-            svgMap.appendChild(path);
-        });
+                    if (sources.length > 0) {
+                        sourceList.innerHTML = sources.map(source => 
+                            `<li><a href="${source.uri}" target="_blank" class="hover:underline">${source.title}</a></li>`
+                        ).join('');
+                        sourceContainer.classList.remove('hidden');
+                    } else {
+                        sourceContainer.classList.add('hidden');
+                    }
+
+                } else {
+                    errorContainer.classList.remove('hidden');
+                    responseTextEl.innerHTML = '<p>Search failed or returned no data.</p>';
+                }
+
+            } catch (error) {
+                console.error('API or Fetch Error:', error);
+                errorContainer.classList.remove('hidden');
+                responseTextEl.innerHTML = '<p>Connection error. Could not reach the service.</p>';
+            } finally {
+                setUIState(false);
+            }
+        }
     </script>
 </body>
 </html>
