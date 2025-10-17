@@ -2,13 +2,11 @@
   "name": "world-time-tracker-backend",
   "version": "1.0.0",
   "description": "Backend server for World Time Tracker",
-  "main": "server.js",
   "type": "module",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "server": "node server.js",
-    "client": "npm run dev --prefix client",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "server": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -16,8 +14,5 @@
     "express": "^4.19.2",
     "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2"
-  },
-  "devDependencies": {
-    "concurrently": "^8.0.0"
   }
 }

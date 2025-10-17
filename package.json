@@ -1,17 +1,21 @@
 {
-  "name": "world-time-tracker",
-  "private": true,
+  "name": "world-time-frontend",
   "version": "1.0.0",
-  "description": "Unified runner for World Time Tracker backend and frontend",
+  "type": "module",
   "scripts": {
-  "dev": "npm run dev --prefix backend",
-  "server": "npm run server --prefix backend",
-  "client": "npm run client --prefix backend",
-  "start": "npm start --prefix backend",
-  "dev:full": "concurrently \"npm run server --prefix backend\" \"npm run dev --prefix backend/client\"",
-  "prod": "npm run build --prefix backend/client && npm start --prefix backend"
-},
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "devDependencies": {
-    "concurrently": "^8.0.0"
+    "vite": "^7.1.10",
+    "@vitejs/plugin-react": "^5.0.4",
+    "tailwindcss": "4.1.14",
+    "@tailwindcss/postcss": "4.1.14",
+    "autoprefixer": "10.4.21"
   }
 }
