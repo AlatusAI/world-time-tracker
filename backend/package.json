@@ -1,18 +1,19 @@
 {
   "name": "world-time-tracker-backend",
   "version": "1.0.0",
-  "description": "Backend server for World Time Tracker",
+  "private": true,
   "type": "module",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "server": "node server.js"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   }
 }

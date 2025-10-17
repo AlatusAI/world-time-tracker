@@ -2,23 +2,28 @@ import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
+
 const app = express();
 app.use(cors());
-if (!process.env.OPENWEATHER_API_KEY) {
-  console.warn("⚠️ OPENWEATHER_API_KEY is not set. Weather routes will fail.");
-}
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", time: new Date().toISOString() });
-});
 
 const PORT = process.env.PORT || 5000;
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
 
+// --- Health check ---
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString() });
+});
+
 // --- Helper to fetch weather + local time ---
 async function getCityWeather(city) {
+  if (!OPENWEATHER_API_KEY) {
+    throw new Error("OPENWEATHER_API_KEY is not set");
+  }
+
   const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${OPENWEATHER_API_KEY}&units=metric`;
   const response = await fetch(url);
 
@@ -45,7 +50,7 @@ async function getCityWeather(city) {
   };
 }
 
-// --- Route for single city (keep it for testing) ---
+// --- Route for single city ---
 app.get("/api/city/:city", async (req, res) => {
   try {
     const cityData = await getCityWeather(req.params.city);
@@ -55,7 +60,7 @@ app.get("/api/city/:city", async (req, res) => {
   }
 });
 
-// --- NEW: Route to compare two cities ---
+// --- Route to compare two cities ---
 app.get("/api/compare/:city1/:city2", async (req, res) => {
   try {
     const { city1, city2 } = req.params;
@@ -63,26 +68,27 @@ app.get("/api/compare/:city1/:city2", async (req, res) => {
       getCityWeather(city1),
       getCityWeather(city2)
     ]);
-
     res.json({ city1: data1, city2: data2 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-import path from "path";
-import { fileURLToPath } from "url";
 
+// --- Serve frontend in production ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static files from the React build (client/dist)
-app.use(express.static(path.join(__dirname, "client", "dist")));
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../../client/dist")));
 
-// Catch-all: let React Router handle non-API routes
-app.get("*", (req, res) => {
-  // If request starts with /api, skip to next (don’t override API)
-  if (req.path.startsWith("/api")) return res.status(404).json({ error: "Not found" });
-  res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
+  app.get("*", (req, res) => {
+    if (req.path.startsWith("/api")) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    res.sendFile(path.join(__dirname, "../../client/dist", "index.html"));
+  });
+}
+
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
 });
-
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
