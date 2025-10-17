@@ -1,13 +1,17 @@
 {
   "name": "world-time-tracker",
-  "version": "1.0.0",
   "private": true,
+  "version": "1.0.0",
+  "description": "Unified runner for World Time Tracker backend and frontend",
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd backend && npm start",
-    "client": "cd frontend && npm run dev"
-  },
+  "dev": "npm run dev --prefix backend",
+  "server": "npm run server --prefix backend",
+  "client": "npm run client --prefix backend",
+  "start": "npm start --prefix backend",
+  "dev:full": "concurrently \"npm run server --prefix backend\" \"npm run dev --prefix backend/client\"",
+  "prod": "npm run build --prefix backend/client && npm start --prefix backend"
+},
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^8.0.0"
   }
 }

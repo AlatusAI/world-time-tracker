@@ -5,13 +5,19 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "server": "node server.js",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0"
   }
 }
