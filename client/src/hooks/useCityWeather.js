@@ -9,7 +9,7 @@ export default function useCityWeather(city) {
     if (!city) return;
 
     setLoading(true);
-    fetch(\`/api/city/\${encodeURIComponent(city)}\`)
+    fetch(`/api/city/${encodeURIComponent(city)}`)
       .then(res => {
         if (!res.ok) throw new Error("Failed to fetch weather");
         return res.json();
