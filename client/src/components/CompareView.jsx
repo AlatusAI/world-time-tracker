@@ -1,147 +1,407 @@
-import React, { useState, useEffect } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Tooltip,
-  useMap,
-} from "react-leaflet";
-import L from "leaflet";
+import React, { useState, useRef, useEffect } from "react";
+import Globe from "react-globe.gl";
 
-// Helper to auto-fit map bounds to both cities
-function FitBounds({ city1, city2 }) {
-  const map = useMap();
-  useEffect(() => {
-    if (city1 && city2 && city1.lat && city2.lat) {
-      const bounds = [
-        [city1.lat, city1.lon],
-        [city2.lat, city2.lon],
-      ];
-      map.fitBounds(bounds, { padding: [50, 50] });
+// --- Helpers ---
+function formatLocalTime(utcEpochMs, timeZoneId) {
+  if (!utcEpochMs || !timeZoneId) return "—";
+  try {
+    return new Intl.DateTimeFormat([], {
+      timeZone: timeZoneId,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(utcEpochMs));
+  } catch {
+    return "—";
+  }
+}
+function getTzAbbr(utcEpochMs, timeZoneId) {
+  try {
+    const parts = new Intl.DateTimeFormat([], {
+      timeZone: timeZoneId,
+      timeZoneName: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(new Date(utcEpochMs));
+    return parts.find((p) => p.type === "timeZoneName")?.value || "";
+  } catch {
+    return "";
+  }
+}
+function formatLocalClock(utcMs, timeZoneId) {
+  if (!utcMs || !timeZoneId) return "—";
+  try {
+    return new Intl.DateTimeFormat([], {
+      timeZone: timeZoneId,
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(utcMs));
+  } catch {
+    return "—";
+  }
+}
+function getOffsetMinutes(timeZoneId, utcEpochMs) {
+  try {
+    const dtf = new Intl.DateTimeFormat([], {
+      timeZone: timeZoneId,
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const parts = dtf.formatToParts(new Date(utcEpochMs));
+    const hour = parseInt(parts.find((p) => p.type === "hour").value, 10);
+    const minute = parseInt(parts.find((p) => p.type === "minute").value, 10);
+    const localMinutes = hour * 60 + minute;
+    const utcDate = new Date(utcEpochMs);
+    const utcMinutes = utcDate.getUTCHours() * 60 + utcDate.getUTCMinutes();
+    let offset = localMinutes - utcMinutes;
+    if (offset > 720) offset -= 1440;
+    if (offset < -720) offset += 1440;
+    return offset;
+  } catch {
+    return 0;
+  }
+}
+function formatTimeDifference(city1, city2) {
+  if (!city1 || !city2) return "";
+  const offset1 = getOffsetMinutes(city1.timeZoneId, city1.utcEpochMs);
+  const offset2 = getOffsetMinutes(city2.timeZoneId, city2.utcEpochMs);
+  const diffHours = (offset2 - offset1) / 60;
+  if (diffHours === 0) return "Same local time";
+  if (diffHours > 0) return `${city2.city} is ${diffHours}h ahead of ${city1.city}`;
+  return `${city2.city} is ${Math.abs(diffHours)}h behind ${city1.city}`;
+}
+function aqiLabel(aqi) {
+  switch (aqi) {
+    case 1: return "Good";
+    case 2: return "Fair";
+    case 3: return "Moderate";
+    case 4: return "Poor";
+    case 5: return "Very Poor";
+    default: return "—";
+  }
+}
+function aqiColorClass(aqi) {
+  switch (aqi) {
+    case 1: return "bg-green-600";
+    case 2: return "bg-lime-600";
+    case 3: return "bg-yellow-600";
+    case 4: return "bg-orange-600";
+    case 5: return "bg-red-700";
+    default: return "bg-gray-600";
+  }
+}
+function fitTwoCities(c1, c2) {
+  const midLat = (c1.lat + c2.lat) / 2;
+  const midLon = (c1.lon + c2.lon) / 2;
+  const dLat = Math.abs(c1.lat - c2.lat);
+  const dLon = Math.abs(c1.lon - c2.lon);
+  const maxDelta = Math.max(dLat, dLon);
+  let altitude = 1.6;
+  if (maxDelta > 60) altitude = 2.6;
+  else if (maxDelta > 30) altitude = 2.2;
+  else if (maxDelta > 15) altitude = 1.8;
+  return { lat: midLat, lon: midLon, altitude };
+}
+
+// --- Comparative insights builder ---
+function buildComparisons(city1, city2) {
+  if (!city1 || !city2) return [];
+  const diffs = [];
+
+  // Temperature
+  if (city1.temperature != null && city2.temperature != null) {
+    const delta = Math.round(city2.temperature - city1.temperature);
+    if (delta > 0) diffs.push(`🌡️ +${delta}°C`);
+    else if (delta < 0) diffs.push(`🌡️ -${Math.abs(delta)}°C`);
+  }
+
+  // Humidity
+  if (city1.humidity != null && city2.humidity != null) {
+    const delta = city2.humidity - city1.humidity;
+    if (delta > 0) diffs.push(`💧 +${delta}%`);
+    else if (delta < 0) diffs.push(`💧 -${Math.abs(delta)}%`);
+  }
+
+  // Wind (m/s)
+  if (city1.wind != null && city2.wind != null) {
+    const deltaRaw = city2.wind - city1.wind;
+    const delta = Math.round(deltaRaw * 10) / 10;
+    if (delta > 0) diffs.push(`🌬️ +${delta} m/s`);
+    else if (delta < 0) diffs.push(`🌬️ -${Math.abs(delta)} m/s`);
+  }
+
+  // AQI
+  // Daylight duration difference (instead of sunrise/sunset offsets)
+  if (city1.sunrise && city1.sunset && city2.sunrise && city2.sunset) {
+    const dur1 = (city1.sunset - city1.sunrise) / 60000; // minutes
+    const dur2 = (city2.sunset - city2.sunrise) / 60000;
+    const diff = Math.round(Math.abs(dur1 - dur2));
+    if (diff > 0) {
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      if (dur1 > dur2) {
+        diffs.push(`${city1.city} has ${h}h ${m}m more daylight than ${city2.city}`);
+      } else {
+        diffs.push(`${city2.city} has ${h}h ${m}m more daylight than ${city1.city}`);
+      }
     }
-  }, [city1, city2, map]);
-  return null;
+  }
+  if (city1.aqi != null && city2.aqi != null) {
+    const delta = city2.aqi - city1.aqi;
+    if (delta > 0) diffs.push(`🌫️ AQI +${delta}`);
+    else if (delta < 0) diffs.push(`🌫️ AQI -${Math.abs(delta)}`);
+  }
+
+  // Sunrise/Sunset offsets (epoch ms expected)
+  if (city1.sunrise && city2.sunrise) {
+    const diffMin = Math.round((city2.sunrise - city1.sunrise) / 60000);
+  }
+  if (city1.sunset && city2.sunset) {
+    const diffMin = Math.round((city2.sunset - city1.sunset) / 60000);
+  }
+
+  return diffs;
+}
+
+// --- Card ---
+function CityCard({ city, forecast, aqi }) {
+  const timeStr = formatLocalTime(city.utcEpochMs, city.timeZoneId);
+  const tzAbbr = getTzAbbr(city.utcEpochMs, city.timeZoneId);
+  const sunrise = formatLocalClock(city.sunrise, city.timeZoneId);
+  const sunset = formatLocalClock(city.sunset, city.timeZoneId);
+  const aqiVal = aqi?.aqi ?? null;
+  const aqiLabelText = aqiLabel(aqiVal);
+  const aqiClass = aqiColorClass(aqiVal);
+
+  // Today's extremes + precipitation probability
+  const today = forecast && forecast.length > 0 ? forecast[0] : null;
+  const todayMin = today ? Math.round(today.min) : null;
+  const todayMax = today ? Math.round(today.max) : null;
+  const todayPop = today && today.pop != null ? Math.round(today.pop * 100) : null;
+
+  return (
+    <div className="bg-black bg-opacity-70 text-white rounded-lg p-4 shadow-lg">
+      <h2 className="font-bold text-lg mb-2">{city.city}, {city.country}</h2>
+      {city.imageUrl ? (
+        <img src={city.imageUrl} alt={city.city} className="rounded mb-2 w-full h-auto" />
+      ) : (
+        <div className="bg-gray-700 text-center py-8 rounded">No image available</div>
+      )}
+      <div className="text-sm">
+        {city.temperature}°C (feels {city.feelsLike ?? "—"}°) — {city.description || "—"}
+      </div>
+      {today && (
+        <div className="text-sm">
+          Today: {todayMin}° / {todayMax}°{todayPop != null ? ` · Rain chance: ${todayPop}%` : ""}
+        </div>
+      )}
+      <div className="text-sm">Humidity: {city.humidity ?? "—"}% | Wind: {city.wind ?? "—"} m/s</div>
+      <div className="mt-1">
+        <span className={`inline-block ${aqiClass} text-white text-xs px-2 py-1 rounded`}>
+          AQI: {aqiVal ?? "—"} {aqiLabelText !== "—" ? `(${aqiLabelText})` : ""}
+        </span>
+      </div>
+      <div className="text-sm mt-1">Sunrise: {sunrise} | Sunset: {sunset}</div>
+      <div className="mt-2 font-semibold">{timeStr}{tzAbbr ? ` (${tzAbbr})` : ""}</div>
+      {forecast && forecast.length > 0 && (
+        <div className="mt-3 grid grid-cols-5 gap-2 text-center text-xs">
+          {forecast.map((day) => (
+            <div key={day.date} className="bg-gray-800 rounded p-1">
+              <div>{new Date(day.date).toLocaleDateString([], { weekday: "short" })}</div>
+              <img src={`https://openweathermap.org/img/wn/${day.icon}.png`} alt={day.description} className="mx-auto" />
+              <div>{Math.round(day.min)}° / {Math.round(day.max)}°</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CompareView() {
   const [mode, setMode] = useState("compare");
-  const [city1, setCity1] = useState("London");
-  const [city2, setCity2] = useState("Tokyo");
-  const [singleCity, setSingleCity] = useState("London");
-  const [data, setData] = useState(null);
+  const [city1Input, setCity1Input] = useState("Lisbon,PT");
+  const [city2Input, setCity2Input] = useState("Kuala Lumpur,MY");
+  const [suggestions1, setSuggestions1] = useState([]);
+  const [suggestions2, setSuggestions2] = useState([]);
+  const [data, setData] = useState(null); // { city1, city2, flightHours, distanceKm, forecast1, forecast2, aqi1, aqi2 }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showAllComparisons, setShowAllComparisons] = useState(false);
+  const globeRef = useRef();
 
-  // --- Fetch single city ---
-  const fetchSingle = () => {
-    if (!singleCity) return;
-    setLoading(true);
-    fetch("/api/city/" + encodeURIComponent(singleCity))
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch city");
-        return res.json();
-      })
-      .then((json) => {
-        console.log("Single city API response:", json);
-        setData(json);
-        setError(null);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+  useEffect(() => {
+    if (!globeRef.current) return;
+    const controls = globeRef.current.controls();
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+  }, []);
+
+  // Autocomplete suggestions
+  const fetchSuggestions = async (q, setFn) => {
+    const query = q.trim();
+    if (!query) return setFn([]);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) return setFn([]);
+      const arr = await res.json();
+      setFn(arr.map(s => ({
+        name: s.name,
+        country: s.country,
+        state: s.state || null,
+        lat: s.lat,
+        lon: s.lon
+      })));
+    } catch {
+      setFn([]);
+    }
   };
 
-  // --- Fetch comparison ---
-  const fetchComparison = () => {
-    if (!city1 || !city2) return;
-    setLoading(true);
-    fetch(
-      "/api/compare/" +
-        encodeURIComponent(city1) +
-        "/" +
-        encodeURIComponent(city2)
-    )
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch comparison");
-        return res.json();
-      })
-      .then((json) => {
-        console.log("Compare API response:", json);
-        setData(json);
-        setError(null);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+  const fetchForecast = async (cityName) => {
+    try {
+      const r = await fetch(`/api/forecast/${encodeURIComponent(cityName)}`);
+      if (!r.ok) return null;
+      const json = await r.json();
+      return json?.forecast || null;
+    } catch {
+      return null;
+    }
   };
 
-  // --- Render marker with permanent tooltip card ---
-  const renderMarker = (c, color) => {
-    if (!c || !c.lat || !c.lon) return null;
+  const fetchAQI = async (cityName) => {
+    try {
+      const r = await fetch(`/api/aqi/${encodeURIComponent(cityName)}`);
+      if (!r.ok) return null;
+      const json = await r.json();
+      return json || null;
+    } catch {
+      return null;
+    }
+  };
 
-    const icon = new L.Icon({
-      iconUrl:
-        color === "blue"
-          ? "https://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-          : "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-      iconSize: [32, 32],
-    });
+  const fetchSingle = async () => {
+    const q = city1Input.trim();
+    if (!q) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/city/${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error("Failed to fetch city");
+      const city = await res.json();
+      const [forecast1, aqi1] = await Promise.all([fetchForecast(q), fetchAQI(q)]);
+      // Attach AQI to city for comparisons
+      setData({ city1: { ...city, aqi: aqi1?.aqi ?? null }, forecast1, aqi1 });
+      animateCamera([city]);
+    } catch (e) {
+      setError(e.message);
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-      <Marker position={[c.lat, c.lon]} icon={icon}>
-        <Tooltip permanent direction="top" offset={[0, -20]} opacity={1}>
-          <div
-            className="w-56 h-48 rounded-lg text-white flex flex-col justify-end p-3 shadow-lg"
-            style={{
-              backgroundImage: `url(https://source.unsplash.com/400x300/?${c.city})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          >
-            <h3 className="font-bold text-lg">
-              {c.city}, {c.country}
-            </h3>
-            <p>{c.temperature}°C — {c.description}</p>
-            <p>Humidity: {c.humidity}% | Wind: {c.wind} m/s</p>
-            <p>
-              {c.localTime
-                ? new Date(c.localTime).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "N/A"}
-            </p>
-          </div>
-        </Tooltip>
-      </Marker>
-    );
+  const fetchComparison = async () => {
+    const q1 = city1Input.trim();
+    const q2 = city2Input.trim();
+    if (!q1 || !q2) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/compare/${encodeURIComponent(q1)}/${encodeURIComponent(q2)}`);
+      if (!res.ok) throw new Error("Failed to fetch comparison");
+      const json = await res.json();
+      const [forecast1, forecast2, aqi1, aqi2] = await Promise.all([
+        fetchForecast(q1),
+        fetchForecast(q2),
+        fetchAQI(q1),
+        fetchAQI(q2),
+      ]);
+      setData({
+        ...json,
+        forecast1,
+        forecast2,
+        aqi1,
+        aqi2,
+        city1: { ...json.city1, aqi: aqi1?.aqi ?? null },
+        city2: { ...json.city2, aqi: aqi2?.aqi ?? null },
+      });
+      setShowAllComparisons(false); // reset on new compare
+      animateCamera([json.city1, json.city2]);
+    } catch (e) {
+      setError(e.message);
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const animateCamera = (cities) => {
+    if (!globeRef.current || !cities?.length) return;
+    const globe = globeRef.current;
+    const flyTo = (c, altitude = 1.3, duration = 1000) => {
+      globe.pointOfView({ lat: c.lat, lng: c.lon, altitude }, duration);
+      return new Promise((resolve) => setTimeout(resolve, duration + 400));
+    };
+    (async () => {
+      if (cities.length === 1) {
+        await flyTo(cities[0], 1.2, 1000);
+      } else if (cities.length === 2) {
+        await flyTo(cities[0], 1.2, 1000);
+        await flyTo(cities[1], 1.2, 1000);
+        const fitView = fitTwoCities(cities[0], cities[1]);
+        await flyTo(fitView, fitView.altitude, 1400);
+      }
+    })();
+  };
+
+  // Globe pins and arcs (fresh array each time so labels update immediately)
+  const globeCities = (() => {
+    if (!data) return [];
+    const valid = (c) => c && c.lat != null && c.lon != null;
+    if (mode === "compare") return [...[data?.city1, data?.city2].filter(valid)];
+    return [...[data?.city1].filter(valid)];
+  })();
+
+  const arcs = (() => {
+    if (mode !== "compare" || !data?.city1 || !data?.city2) return [];
+    const a = data.city1;
+    const b = data.city2;
+    return [{
+      startLat: a.lat,
+      startLng: a.lon,
+      endLat: b.lat,
+      endLng: b.lon,
+      color: ["#00A3FF", "#FF3B3B"],
+    }];
+  })();
+
+  const labelTooltip = (d) => {
+    const timeStr = formatLocalTime(d.utcEpochMs, d.timeZoneId);
+    const tzAbbr = getTzAbbr(d.utcEpochMs, d.timeZoneId);
+    return [
+      `${d.city}, ${d.country}`,
+      `Time: ${timeStr}${tzAbbr ? ` (${tzAbbr})` : ""}`,
+      `Temp: ${d.temperature ?? "—"}°C`,
+      `Weather: ${d.description ?? "—"}`,
+      `Humidity: ${d.humidity ?? "—"}%`,
+      `Wind: ${d.wind ?? "—"} m/s`,
+    ].join("\n");
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-start p-6">
-      {/* Title + controls */}
-      <h1 className="text-4xl font-bold text-gray-800 mb-6 z-10">
-        {mode === "single" ? "Single City Weather" : "Compare Cities"}
-      </h1>
-
-      <div className="flex gap-4 mb-6 z-10">
+    <div className="relative min-h-screen w-screen">
+      {/* Mode toggle */}
+      <div className="flex gap-4 items-center justify-center pt-6 z-20 relative">
         <button
-          onClick={() => {
-            setMode("single");
-            setData(null);
-          }}
-          className={`px-4 py-2 rounded ${
-            mode === "single" ? "bg-blue-700 text-white" : "bg-gray-200"
-          }`}
+          onClick={() => { setMode("single"); setData(null); setError(null); }}
+          className={`px-4 py-2 rounded ${mode === "single" ? "bg-blue-700 text-white" : "bg-gray-200"}`}
         >
           Single City
         </button>
         <button
-          onClick={() => {
-            setMode("compare");
-            setData(null);
-          }}
-          className={`px-4 py-2 rounded ${
-            mode === "compare" ? "bg-blue-700 text-white" : "bg-gray-200"
-          }`}
+          onClick={() => { setMode("compare"); setData(null); setError(null); }}
+          className={`px-4 py-2 rounded ${mode === "compare" ? "bg-blue-700 text-white" : "bg-gray-200"}`}
         >
           Compare Cities
         </button>
@@ -149,37 +409,108 @@ export default function CompareView() {
 
       {/* Inputs */}
       {mode === "single" ? (
-        <div className="flex gap-4 mb-6 z-10">
-          <input
-            type="text"
-            value={singleCity}
-            onChange={(e) => setSingleCity(e.target.value)}
-            placeholder="Enter city"
-            className="border rounded px-3 py-2 w-40"
-          />
+        <div className="flex gap-3 items-start justify-center mt-4 z-20 relative">
+          <div className="relative">
+            <input
+              type="text"
+              value={city1Input}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCity1Input(val);
+                fetchSuggestions(val, setSuggestions1);
+              }}
+              placeholder="Type city or country (e.g., Dili,TL)"
+              className="border rounded px-3 py-2 w-64"
+              autoComplete="off"
+            />
+            {suggestions1.length > 0 && (
+              <ul className="absolute bg-white border rounded w-64 max-h-48 overflow-y-auto shadow z-30">
+                {suggestions1.map((s) => (
+                  <li
+                    key={`${s.name}-${s.country}-${s.lat}-${s.lon}`}
+                    className="px-2 py-1 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setCity1Input(s.name + "," + s.country);
+                      setSuggestions1([]);
+                    }}
+                  >
+                    {s.name}{s.state ? `, ${s.state}` : ""} ({s.country})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <button
             onClick={fetchSingle}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
-            Get Weather
+            Get time & weather
           </button>
         </div>
       ) : (
-        <div className="flex gap-4 mb-6 z-10">
-          <input
-            type="text"
-            value={city1}
-            onChange={(e) => setCity1(e.target.value)}
-            placeholder="City 1"
-            className="border rounded px-3 py-2 w-40"
-          />
-          <input
-            type="text"
-            value={city2}
-            onChange={(e) => setCity2(e.target.value)}
-            placeholder="City 2"
-            className="border rounded px-3 py-2 w-40"
-          />
+        <div className="flex gap-3 items-start justify-center mt-4 z-20 relative">
+          <div className="relative">
+            <input
+              type="text"
+              value={city1Input}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCity1Input(val);
+                fetchSuggestions(val, setSuggestions1);
+              }}
+              placeholder="City or country 1 (e.g., Lisbon,PT)"
+              className="border rounded px-3 py-2 w-64"
+              autoComplete="off"
+            />
+            {suggestions1.length > 0 && (
+              <ul className="absolute bg-white border rounded w-64 max-h-48 overflow-y-auto shadow z-30">
+                {suggestions1.map((s) => (
+                  <li
+                    key={`${s.name}-${s.country}-${s.lat}-${s.lon}`}
+                    className="px-2 py-1 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setCity1Input(s.name + "," + s.country);
+                      setSuggestions1([]);
+                    }}
+                  >
+                    {s.name}{s.state ? `, ${s.state}` : ""} ({s.country})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="relative">
+            <input
+              type="text"
+              value={city2Input}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCity2Input(val);
+                fetchSuggestions(val, setSuggestions2);
+              }}
+              placeholder="City or country 2 (e.g., Kuala Lumpur,MY)"
+              className="border rounded px-3 py-2 w-64"
+              autoComplete="off"
+            />
+            {suggestions2.length > 0 && (
+              <ul className="absolute bg-white border rounded w-64 max-h-48 overflow-y-auto shadow z-30">
+                {suggestions2.map((s) => (
+                  <li
+                    key={`${s.name}-${s.country}-${s.lat}-${s.lon}`}
+                    className="px-2 py-1 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setCity2Input(s.name + "," + s.country);
+                      setSuggestions2([]);
+                    }}
+                  >
+                    {s.name}{s.state ? `, ${s.state}` : ""} ({s.country})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <button
             onClick={fetchComparison}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -189,49 +520,84 @@ export default function CompareView() {
         </div>
       )}
 
-      {/* Loading / error */}
-      {loading && <p className="text-gray-700 z-10">Loading...</p>}
-      {error && <p className="text-red-500 z-10">{error}</p>}
+      {loading && <p className="text-gray-700 z-20 text-center mt-4">Loading...</p>}
+      {error && <p className="text-red-500 z-20 text-center mt-2">{error}</p>}
 
-      {/* Map always visible */}
-      <div className="absolute inset-0 z-0">
-        <MapContainer
-          center={[20, 0]}
-          zoom={2}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl={true}
-          attributionControl={false}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution=""
-          />
-          {mode === "compare" && data && (
-            <>
-              <FitBounds city1={data.city1} city2={data.city2} />
-              {renderMarker(data.city1, "blue")}
-              {renderMarker(data.city2, "red")}
-            </>
-          )}
-        </MapContainer>
-      </div>
-
-      {/* Single city fallback card */}
-      {mode === "single" && data && (
-        <div className="mt-6 z-10 bg-white shadow-lg rounded-lg p-6">
-          <h2 className="text-xl font-bold mb-2">
-            {data.city}, {data.country}
-          </h2>
-          <p>{data.temperature}°C — {data.description}</p>
-          <p>Humidity: {data.humidity}% | Wind: {data.wind} m/s</p>
-          <p>
-            {new Date(data.localTime).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
+      {/* Docked cards */}
+      {data?.city1 && (
+        <div className="absolute top-24 left-4 w-80 z-20">
+          <CityCard city={data.city1} forecast={data.forecast1} aqi={data.aqi1} />
         </div>
       )}
+      {data?.city2 && mode === "compare" && (
+        <div className="absolute top-24 right-4 w-80 z-20">
+          <CityCard city={data.city2} forecast={data.forecast2} aqi={data.aqi2} />
+        </div>
+      )}
+
+      {/* Flight time & distance */}
+      {mode === "compare" && data?.flightHours != null && data?.distanceKm != null && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded z-20">
+          ✈️ Estimated flight: {data.flightHours.toFixed(1)} h · {Math.round(data.distanceKm)} km
+        </div>
+      )}
+
+      {/* Time difference */}
+      {mode === "compare" && data?.city1 && data?.city2 && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded z-20">
+          🕒 {formatTimeDifference(data.city1, data.city2)}
+        </div>
+      )}
+
+      {/* Comparative insights (collapsed by default) */}
+      {mode === "compare" && data?.city1 && data?.city2 && (
+        <div className="transition-all duration-500 overflow-hidden absolute bottom-36 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded z-20 text-sm space-y-1 w-80 text-center grid grid-cols-2 gap-2" style={{maxHeight: showAllComparisons ? "500px" : "60px", opacity: showAllComparisons ? 1 : 0.9}}>
+          {(() => {
+            const all = buildComparisons(data.city1, data.city2);
+            const visible = showAllComparisons ? all : all.slice(0, 2);
+            return (
+              <>
+                {visible.map((line, idx) => (
+                  <div key={idx}>{line.includes("warmer") || line.includes("cooler") ? "🌡️ " : ""}{line.includes("humid") ? "💧 " : ""}{line.includes("winds") ? "🌬️ " : ""}{line.includes("air quality") ? "🌫️ " : ""}{line.includes("daylight") ? "☀️ " : ""}{line}</div>
+                ))}
+                {all.length > 2 && (
+                  <button
+                    onClick={() => setShowAllComparisons(!showAllComparisons)}
+                    className="mt-1 text-blue-400 underline text-xs"
+                  >
+                    {showAllComparisons ? "Show less ▲" : "Show more ▼"}
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Globe */}
+      <div className="fixed inset-0 z-0">
+        <Globe
+          ref={globeRef}
+          width={window.innerWidth}
+          height={window.innerHeight}
+          globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+          backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+
+          labelsData={globeCities}
+          labelLat={(d) => d.lat}
+          labelLng={(d) => d.lon}
+          labelText={(d) => `${d.city}`}
+          labelSize={2.2}
+          labelColor={() => "white"}
+          labelTooltip={labelTooltip}
+
+          arcsData={arcs}
+          arcColor={(d) => d.color}
+          arcDashLength={0.4}
+          arcDashGap={0.9}
+          arcDashAnimateTime={700}
+        />
+      </div>
     </div>
   );
 }
