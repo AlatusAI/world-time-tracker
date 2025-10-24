@@ -1,6 +1,45 @@
 import React, { useState, useRef, useEffect } from "react";
-import { cityBackgrounds } from "../utils/cityBackgrounds";
+
+function renderComparisons(city1, city2, showAllComparisons, setShowAllComparisons) {
+  const all = buildComparisons(city1, city2);
+  const visible = showAllComparisons ? all : all.slice(0, 2);
+
+  const deltas = visible.map(line => {
+    const match = typeof line === "string" ? line.match(/[-+]?d+(?:\d+)?/) : null;
+    return match ? Math.abs(parseFloat(match[0])) : 0;
+  });
+  const maxDelta = deltas.length ? Math.max(...deltas) : 0;
+
+  return (
+    <>
+      {visible.map((line, idx) => {
+        const match = typeof line === "string" ? line.match(/[-+]?d+(?:\d+)?/) : null;
+        const val = match ? Math.abs(parseFloat(match[0])) : 0;
+        const isMax = val === maxDelta;
+
+        return (
+          <div key={idx} className={`text-sm ${isMax ? "font-bold text-lg text-white bg-yellow-600/20 rounded px-1" : ""}`}>
+            {line.includes("warmer") || line.includes("cooler") ? "🌡️ " : ""}
+            {line.includes("humid") ? "💧 " : ""}
+            {line.includes("winds") ? "🌬️ " : ""}
+            {line.includes("air quality") ? "🌫️ " : ""}
+            {line.includes("daylight") ? "☀️ " : ""}
+            {line}
+          </div>
+        );
+      })}
+      {all.length > 2 && (
+        <button onClick={() => setShowAllComparisons(!showAllComparisons)} className="mt-1 text-blue-400 underline text-xs">
+          {showAllComparisons ? "Show less ▲" : "Show more ▼"}
+        </button>
+      )}
+    </>
+  );
+}
+
 import Globe from "react-globe.gl";
+
+
 
 // --- Helpers ---
 function formatLocalTime(utcEpochMs, timeZoneId) {
@@ -106,6 +145,64 @@ function fitTwoCities(c1, c2) {
 }
 
 // --- Comparative insights builder ---
+function buildComparisons(city1, city2) {
+  if (!city1 || !city2) return [];
+  const diffs = [];
+
+  // Temperature
+  if (city1.temperature != null && city2.temperature != null) {
+    const delta = Math.round(city2.temperature - city1.temperature);
+    if (delta > 0) diffs.push(`🌡️ +${delta}°C`);
+    else if (delta < 0) diffs.push(`🌡️ -${Math.abs(delta)}°C`);
+  }
+
+  // Humidity
+  if (city1.humidity != null && city2.humidity != null) {
+    const delta = city2.humidity - city1.humidity;
+    if (delta > 0) diffs.push(`💧 +${delta}%`);
+    else if (delta < 0) diffs.push(`💧 -${Math.abs(delta)}%`);
+  }
+
+  // Wind (m/s)
+  if (city1.wind != null && city2.wind != null) {
+    const deltaRaw = city2.wind - city1.wind;
+    const delta = Math.round(deltaRaw * 10) / 10;
+    if (delta > 0) diffs.push(`🌬️ +${delta} m/s`);
+    else if (delta < 0) diffs.push(`🌬️ -${Math.abs(delta)} m/s`);
+  }
+
+  // AQI
+  // Daylight duration difference (instead of sunrise/sunset offsets)
+  if (city1.sunrise && city1.sunset && city2.sunrise && city2.sunset) {
+    const dur1 = (city1.sunset - city1.sunrise) / 60000; // minutes
+    const dur2 = (city2.sunset - city2.sunrise) / 60000;
+    const diff = Math.round(Math.abs(dur1 - dur2));
+    if (diff > 0) {
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      if (dur1 > dur2) {
+        diffs.push(`${city1.city} has ${h}h ${m}m more daylight than ${city2.city}`);
+      } else {
+        diffs.push(`${city2.city} has ${h}h ${m}m more daylight than ${city1.city}`);
+      }
+    }
+  }
+  if (city1.aqi != null && city2.aqi != null) {
+    const delta = city2.aqi - city1.aqi;
+    if (delta > 0) diffs.push(`🌫️ AQI +${delta}`);
+    else if (delta < 0) diffs.push(`🌫️ AQI -${Math.abs(delta)}`);
+  }
+
+  // Sunrise/Sunset offsets (epoch ms expected)
+  if (city1.sunrise && city2.sunrise) {
+    const diffMin = Math.round((city2.sunrise - city1.sunrise) / 60000);
+  }
+  if (city1.sunset && city2.sunset) {
+    const diffMin = Math.round((city2.sunset - city1.sunset) / 60000);
+  }
+
+  return diffs;
+}
 
 // --- Card ---
 function CityCard({ city, forecast, aqi }) {
@@ -132,7 +229,7 @@ function CityCard({ city, forecast, aqi }) {
         <div className="bg-gray-700 text-center py-8 rounded">No image available</div>
       )}
       <div className="text-sm">
-        {city.temperature}°C  — {city.description || "—"}
+        {city.temperature}°C (feels {city.feelsLike ?? "—"}°) — {city.description || "—"}
       </div>
       {today && (
         <div className="text-sm">
@@ -171,6 +268,7 @@ export default function CompareView() {
   const [data, setData] = useState(null); // { city1, city2, flightHours, distanceKm, forecast1, forecast2, aqi1, aqi2 }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showAllComparisons, setShowAllComparisons] = useState(false);
   const globeRef = useRef();
 
   useEffect(() => {
@@ -232,6 +330,7 @@ export default function CompareView() {
       if (!res.ok) throw new Error("Failed to fetch city");
       const city = await res.json();
       const [forecast1, aqi1] = await Promise.all([fetchForecast(q), fetchAQI(q)]);
+      // Attach AQI to city for comparisons
       setData({ city1: { ...city, aqi: aqi1?.aqi ?? null }, forecast1, aqi1 });
       animateCamera([city]);
     } catch (e) {
@@ -250,6 +349,7 @@ export default function CompareView() {
     setError(null);
     try {
       const res = await fetch(`/api/compare/${encodeURIComponent(q1)}/${encodeURIComponent(q2)}`);
+      if (!res.ok) throw new Error("Failed to fetch comparison");
       const json = await res.json();
       const [forecast1, forecast2, aqi1, aqi2] = await Promise.all([
         fetchForecast(q1),
@@ -266,6 +366,7 @@ export default function CompareView() {
         city1: { ...json.city1, aqi: aqi1?.aqi ?? null },
         city2: { ...json.city2, aqi: aqi2?.aqi ?? null },
       });
+      setShowAllComparisons(false); // reset on new compare
       animateCamera([json.city1, json.city2]);
     } catch (e) {
       setError(e.message);
@@ -492,8 +593,11 @@ export default function CompareView() {
   <div
     className="transition-all duration-500 overflow-hidden absolute bottom-36 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded z-20 text-sm space-y-1 w-80 text-center grid grid-cols-2 gap-2"
     style={{
+      maxHeight: showAllComparisons ? "500px" : "60px",
+      opacity: showAllComparisons ? 1 : 0.9
     }}
   >
+    {renderComparisons(data.city1, data.city2, showAllComparisons, setShowAllComparisons)}
   </div>
 )}
 

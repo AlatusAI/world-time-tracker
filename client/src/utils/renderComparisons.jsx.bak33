@@ -1,0 +1,49 @@
+import { buildComparisons } from "./buildComparisons";
+import { buildComparisons } from "../components/CompareView.jsx";
+import React from "react";
+
+export function renderComparisons(city1, city2, showAllComparisons, setShowAllComparisons) {
+  console.log("renderComparisons running", { city1, city2 });
+  const all = buildComparisons(city1, city2);
+  const visible = showAllComparisons ? all : all.slice(0, 2);
+
+  const deltas = visible.map(line => {
+    const match = typeof line === "string" ? line.match(/[-+]?\d+(?:\.\d+)?/) : null;
+    return match ? Math.abs(parseFloat(match[0])) : 0;
+  });
+  const maxDelta = deltas.length ? Math.max(...deltas) : 0;
+
+  return (
+    <>
+      {visible.map((line, idx) => {
+        const match = typeof line === "string" ? line.match(/[-+]?\d+(?:\.\d+)?/) : null;
+        const val = match ? Math.abs(parseFloat(match[0])) : 0;
+        const isMax = val === maxDelta;
+
+        return (
+          <div
+            key={idx}
+            className={`text-sm ${
+              isMax ? "font-bold text-lg text-white bg-yellow-600/20 rounded px-1" : ""
+            }`}
+          >
+            {line.includes("warmer") || line.includes("cooler") ? "🌡️ " : ""}
+            {line.includes("humid") ? "💧 " : ""}
+            {line.includes("winds") ? "🌬️ " : ""}
+            {line.includes("air quality") ? "🌫️ " : ""}
+            {line.includes("daylight") ? "☀️ " : ""}
+            {line}
+          </div>
+        );
+      })}
+      {all.length > 2 && (
+        <button
+          onClick={() => setShowAllComparisons(!showAllComparisons)}
+          className="mt-1 text-blue-400 underline text-xs"
+        >
+          {showAllComparisons ? "Show less ▲" : "Show more ▼"}
+        </button>
+      )}
+    </>
+  );
+}
